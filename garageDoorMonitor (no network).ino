@@ -1,7 +1,6 @@
 /*
 Garage door monitor
-Check whether the door is open, close it after a specified time limit is reached
- 
+Check whether the door is open, close it after timeLimit (Seconds) is reached
  */
 
 // the setup routine runs once when you press reset:
@@ -23,25 +22,24 @@ void setup() {
   int incomingByte = 0;
   bool lightStatus;
   
-// the loop routine runs over and over again forever:
+// the loop routine runs over and over:
 void loop() {
-  doorStatus = digitalRead(doorStatusPin);
-  if(doorStatus == 0)
+  doorStatus = digitalRead(doorStatusPin); //check the door status
+  if(doorStatus == 0) //if the door is open
   {
     Serial.println("door is open, start counting");
     for(i = timeLimit + 10, i >= 0; i--;) //start countdown, allow extra 10 seconds while door opens
     {
-    Serial.println(i);
-    checkSerial();
+    Serial.println(i); //print the countdown to the serial port
+    checkSerial(); //check for inputs
     lightStatus = !lightStatus;
-    digitalWrite(statusLight, lightStatus);
-    delay(1000);
-    if(digitalRead(8))//true if door is closed
+    digitalWrite(statusLight, lightStatus); //blink the light
+    delay(1000); // wait 1 second
+    if(digitalRead(doorStatusPin))//check if the door is closed
     {
       Serial.println("Door closed, abort countdown");
-      digitalWrite(statusLight, LOW);
+      digitalWrite(statusLight, LOW); //turn off the status light
       break; //jump out of this loop
-      checkSerial();
     }
     if(i == 0)
     {
@@ -50,7 +48,7 @@ void loop() {
     }
     }
   }
-  if(doorStatus == 1)
+  if(doorStatus == 1) //door is closed
   {
     Serial.println("Door is closed, continue monitoring");
     checkSerial();
@@ -83,6 +81,8 @@ void activateDoor() //This function activates the door, and confirms that the po
      delay(200);   //leave relay closed for this amount of time (ms)
      digitalWrite(doorControlRelay, LOW);
      delay(20000);// Wait 20 seconds to allow the door to close fully
+     //The board will not respond to serial inputs during this 20 seconds
+     
      doorStatus = digitalRead(doorStatusPin); //check the door status pin
     
     
@@ -112,7 +112,7 @@ void activateDoor() //This function activates the door, and confirms that the po
        
        if(doorStatus == 0)//door sensor still says open after two attemps, door status is unknown - possible sensor failure??
        {
-        while(1)//infinite loop to halt program operation
+        while(1)//infinite loop to halt program operation, blink status light every 1/2 second
          {
            digitalWrite(statusLight, LOW);
            delay(250);
@@ -130,12 +130,13 @@ void activateDoor() //This function activates the door, and confirms that the po
 }
      
 
-void checkSerial()
+void checkSerial() //function to handle incoming data on the serial port
+//ignores everything except the character 'O' which will trigger the door opener
 {
   if (Serial.available() > 0)
   {
     incomingByte = Serial.read();
-    Serial.println(incomingByte);
+    Serial.println(incomingByte); //echo the received command (just for debugging)
     if (incomingByte == 79)// 79 = 'O', door open command
     {
       activateDoor();
