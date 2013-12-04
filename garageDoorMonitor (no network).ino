@@ -12,10 +12,10 @@ void setup() {
   pinMode(8, INPUT);//garage door sensor (1 = closed, 0 = open)
 }
 
+//The pin identifiers and time limits should be changed to constants
   int doorStatus = 0;// 1 = closed, 0 = open
   int doorStatusPin = 8;
   int statusLight = 13;
-  int activationTime = 15;
   int doorControlRelay = 2;
   int timeLimit = 300;// maximum time before closing door [300 sec = 5 minutes]
   int i;
