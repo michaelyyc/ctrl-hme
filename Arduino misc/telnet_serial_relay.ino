@@ -16,6 +16,7 @@ byte subnet[] = { 255, 255, 0, 0 };
 char inputChar;
 int i = 0;
 
+
 // telnet defaults to port 23
 EthernetServer server = EthernetServer(23);
 
@@ -38,23 +39,31 @@ void loop()
                                             // same thing happens with iTelnet client for iPhone, probably a standard Telnet protocol thing
                                             // Client trying to negotiate connecrtion? This sketch just ignores the first 26 bytes
  
-   for(i = 0; i < 26; i++)
+   for(i = 0; i < 25; i++)
    {
       inputChar = client.read();// read in the data but don't do anything with it.
    }
  //  server.write("Hello Client");
    
    
-   while(client == true)
+   while(client.connected())
    {
      if(client.available())
      {
        inputChar = client.read();
-       if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
+       if(inputChar > 47 && inputChar < 123 && inputChar != 51)//ignore anything not alpha-numeric
        {
          Serial.print(inputChar);
        }
+          //disabled door opening and closing for security reasons until authentication features added
+       if(inputChar == 51)
+       {
+         server.write("Door open/close locked");
+       }
      }
+     
+     
+  
      
      if(Serial.available())
      {
@@ -62,7 +71,8 @@ void loop()
        server.write(inputChar);//output the serial input to the telnet client
      }
    }  
-    
+
+  
   }
 }
 
