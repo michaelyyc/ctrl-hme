@@ -33,29 +33,36 @@ void loop()
   // if an incoming client connects, there will be bytes available to read:
   EthernetClient client = server.available();
   if (client == true) {
+ //   Serial.println("Client connected...");
+ //   Serial.println("ignoring 26 bytes..."); //Found that the Apple telnet client sends 26 bytes of data once connection is established.
+                                            // same thing happens with iTelnet client for iPhone, probably a standard Telnet protocol thing
+                                            // Client trying to negotiate connecrtion? This sketch just ignores the first 26 bytes
+ 
+   for(i = 0; i < 26; i++)
+   {
+      inputChar = client.read();// read in the data but don't do anything with it.
+   }
+ //  server.write("Hello Client");
+   
+   
+   while(client == true)
+   {
+     if(client.available())
+     {
+       inputChar = client.read();
+       if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
+       {
+         Serial.print(inputChar);
+       }
+     }
+     
+     if(Serial.available())
+     {
+       inputChar = Serial.read();//read the serial input
+       server.write(inputChar);//output the serial input to the telnet client
+     }
+   }  
     
-    for(i = 0; i < 25; i++)
-    {
-      inputChar = client.read();//Ignore 26 bytes of data sent by telnet clients upon connecting
-
-    }
-
-    
-    while(client == true)//don't ask for the password as long as the same client is connected
-      {
-      // read bytes from the incoming client and write them back
-      // to any clients connected to the server:
-      if(client.available());
-      {
-        inputChar = client.read();
-        Serial.print(inputChar);//sent out to serial whatever telnet client has sent;
-      }
-    }
-        if(Serial.available())
-      {
-        inputChar = Serial.read();
-        server.write(inputChar);//output everything from serial to the telnet client
-      }
   }
 }
 
