@@ -14,8 +14,6 @@ byte gateway[] = { 10, 0, 0, 1 };
 // the subnet:
 byte subnet[] = { 255, 255, 0, 0 };
 char inputChar;
-byte password[] = {5,6,8,9,7,2,8,6,4,5,3};
-byte inputPassword [] = {0,0,0,0,0,0,0,0,0,0,0};
 int i = 0;
 
 // telnet defaults to port 23
@@ -35,28 +33,13 @@ void loop()
   // if an incoming client connects, there will be bytes available to read:
   EthernetClient client = server.available();
   if (client == true) {
-    Serial.println("Client connected...");
     
-    //Check for the password
-    server.write("Enter password...");
-    while(!client.available())
+    for(i = 0; i < 25; i++)
     {
-      Serial.println("waiting for telnet input...");//it never enters this, client.available() doesn't work like Serial.available
-      delay(100); // wait for user to enter the password
+      inputChar = client.read();//Ignore 26 bytes of data sent by telnet clients upon connecting
+
     }
-    
-    for(i = 0; i < 11; i++)
-    {
-      inputPassword[i] = client.read();
-      Serial.print("Reading password char ");
-      Serial.println(i);
-    }
-    
-    for(i = 0; i < 11; i++)
-    {
-      server.write(inputPassword[i]);
-    }
-    
+
     
     while(client == true)//don't ask for the password as long as the same client is connected
       {
@@ -68,7 +51,7 @@ void loop()
         Serial.print(inputChar);//sent out to serial whatever telnet client has sent;
       }
     }
-        while(Serial.available())
+        if(Serial.available())
       {
         inputChar = Serial.read();
         server.write(inputChar);//output everything from serial to the telnet client
