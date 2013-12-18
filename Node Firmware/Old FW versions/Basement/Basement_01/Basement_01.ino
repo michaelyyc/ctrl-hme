@@ -49,18 +49,20 @@ Furnace and fan can both be controlled by remote command
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion             0.1
+  #define FWversion             0.2
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
   //Variables
-  bool furnaceStatus = 0;// 1 = closed, 0 = open
+  bool furnaceStatus = 0;// 1 = ON, 0 = OFF
   bool fanStatus = 0; //if repeated attempts to close door don't work, this bit is set and no more attempts are made
+  bool furnaceEnable = 0; //only control the furnace if this is TRUE
   int i;  //for loops
   int i2; //for loops
   int commandReq = 0; //variable to store the request from the controller
   float tempAmbient = -1; //temperature from Zone 1 in degrees C
   float CPUTemp = -1;
+  float tempSetPoint = 18.5; // the temperature set point used in combination with furnaceEnable variable
   bool lightStatus;
   double tempUpdateDelay = 30; //how many seconds (approx) between updates of the temperature sensors
   double tempUpdateCountdown;
@@ -103,6 +105,25 @@ void loop() {
     CPUTemp = getCPUTemp();
 // Turn off the status light
     digitalWrite(statusLight, LOW);
+  }
+  
+  //Disable the furnace in the event of a bad reading from the temperature sensor
+  if(tempAmbient < 10 || tempAmbient > 30)
+  {
+    furnaceEnable = 0;
+  }
+  
+//Decide whether to turn furnace ON or OFF
+  if(furnaceEnable && (tempAmbient < tempSetPoint))
+  {
+    digitalWrite(furnaceControlRelay, LOW); //active LOW - turn furnace ON
+    furnaceStatus = 1;
+  }
+  
+  if((tempAmbient >= (tempSetPoint + 0.5)) || (!furnaceEnable)) // keep furnace on until set point exceeded by 0.5 degrees or !furnaceEnable
+  {
+    digitalWrite(furnaceControlRelay, HIGH);// active LOW - turn furnace OFF
+    furnaceStatus = 0;
 
   }
   
@@ -172,17 +193,14 @@ void commandReply()
 
   if(commandReq == turnFurnaceOn)
   {
-      Serial.print("BF1");
-      digitalWrite(furnaceControlRelay, LOW);
-      return;
-      
+      furnaceEnable = true;
+      Serial.print("BF1");     
   }
   
   if(commandReq == turnFurnaceOff)
   {
+    furnaceEnable = false;
     Serial.print("Bf1");
-    digitalWrite(furnaceControlRelay, HIGH);
-    return;
   }
   
   if(commandReq == turnFanOn)
@@ -216,10 +234,19 @@ void commandReply()
     return;
   }
 
+  if(commandReq == requestFurnaceStatus)
+  {
+    Serial.print("BS");
+    if(furnaceStatus)
+      Serial.print("1");
+    else
+      Serial.print("0");
+    Serial.print("!");
+    return;
+  }
   
   Serial.print("!");//reply for unimplemented commands
       return;
-  
 }
 
 
