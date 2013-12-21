@@ -5,16 +5,21 @@
 
 
 //Constants
-#define oneWireBus1     7 // Temperature Sensor
-#define baud            9600 // serial port baud rate
-#define FWversion       0.12 // FW version
+#define oneWireBus1                   7 // Temperature Sensor
+#define baud                       9600 // serial port baud rate
+#define FWversion                  0.13 // FW version
+#define tempMaximumAllowed         23.0// maximum temperature
+#define tempMinimumAllowed         17.0 //minimum temperature
 
 //Temporary commands for using local sensors instead of telnet relay
   #define requestFWVer              75 //K
   #define requestTemp               76 //L
   #define enableFurnace             77 //M
   #define disableFurnace            78 //N
+  #define increaseTempSetPoint      79 //O
+  #define decreaseTempSetPoint      80 //P
   #define listCommands              63 // ?
+  
   #define newLine                   12 // NEW LINE
   #define carriageReturn            13 
 
@@ -39,7 +44,9 @@ double tempUpdateDelay = 30;
 double loopsPerSecond = 15000;
 char * convertedFloat;
 bool maintainTemperature = false;
-float temperatureSetPoint = 21.0;
+bool furnaceStatus = false;
+float tempSetPoint = 21.5;
+float tempHysterisis = 0.25;
 
 // telnet defaults to port 23
 EthernetServer server = EthernetServer(23);
@@ -94,12 +101,7 @@ void loop()
      if(client.available())
      {
        inputChar = client.read();
-       if(inputChar > 47 && inputChar < 123 && inputChar != 51 && inputChar != listCommands)//ignore anything not alpha-numeric
-       {
-         Serial.print(inputChar);
-         server.write(newLine);
-         server.write(carriageReturn);
-       }
+     
           //disabled door opening and closing for security reasons until authentication features added
        if(inputChar == 51)
        {
@@ -112,7 +114,7 @@ void loop()
          server.print(FWversion);
          server.write(newLine);//new line
          server.write(carriageReturn);
-       }
+     }
        
        if(inputChar == requestTemp)
        {
@@ -128,19 +130,46 @@ void loop()
        {
          maintainTemperature = true;
          server.write("Furnace enabled, maintain ");
-         server.print(temperatureSetPoint);
+         server.print(tempSetPoint);
          server.write(" deg C at upstairs sensor");
          server.write(newLine);//new line
          server.write(carriageReturn);
-         
        }
        
        if(inputChar == disableFurnace)
        {
          maintainTemperature = false;
+         furnaceStatus = false;
+         Serial.print("D");     
          server.write("furnace disabled - not maintaining temperature");
          server.write(newLine);//new line
          server.write(carriageReturn);
+       }
+       
+       if(inputChar == increaseTempSetPoint)
+       {
+         if(tempSetPoint < tempMaximumAllowed)
+         {
+           tempSetPoint = tempSetPoint + 0.25;
+           server.write("Increased temp set point to: ");
+           server.print(tempSetPoint);
+           server.write(" deg C");
+         }
+         else
+           server.write("Maximum Temperature already Set");
+       }
+       
+       if(inputChar == decreaseTempSetPoint)
+       {
+         if(tempSetPoint > tempMinimumAllowed)
+         {
+           tempSetPoint = tempSetPoint - 0.25;
+           server.write("Decreased temp set point to: ");
+           server.print(tempSetPoint);
+           server.write(" deg C");
+         }
+         else
+           server.write("Minimum Temperature Already Reached");
        }
        
        if(inputChar == listCommands)
@@ -223,10 +252,27 @@ void loop()
          server.write(newLine);
          server.write("N : Do Not Maintain Temperature");
          server.write(carriageReturn);
+         server.write(newLine);
+         server.write("O : Increase Set Temperature"); 
+         server.write(carriageReturn);
+         server.write(newLine);
+         server.write("P : Decrease Set Temperature");         
+         server.write(carriageReturn);
          server.write(newLine);    
          server.write(carriageReturn);
-         server.write(newLine);          
-       }       
+         server.write(newLine);   
+       }  
+  
+  
+  //For commands not handled by the controller node directly, relay them to the XBEE network
+    if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
+       {
+         Serial.print(inputChar);
+         server.write(newLine);
+         server.write(carriageReturn);
+       }
+  
+       
      }
 
      if(Serial.available())
@@ -239,31 +285,48 @@ void loop()
    {
      tempAmbient = readAmbientTemp();
      tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
+        
+     //Control furnace by sending commands to the basement node based on tempAmbient
+
+      if(tempAmbient == -127.0 || tempAmbient == 0.0) //sensor error, disable furnace
+      {
+       Serial.print("D");     
+       server.write("Sensor ERROR - Sent OFF command to basement node");  
+       server.write(carriageReturn);
+       server.write(newLine);             
+      }
     
-    
-     if(maintainTemperature)
-     {
-       //Turn on the furnace if temperature is out of range too low
-       if(tempAmbient < (temperatureSetPoint - 0.25) && tempAmbient != -127.0) //ignore bad temperature sensor valuesterm
-       {
-         Serial.print("C");//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
-         server.write("sent ON command to basement node");  
-         server.write(carriageReturn);
-         server.write(newLine);    
-       }
-       //turn off the furnace if temperature is out of range too high
-       if(tempAmbient > (temperatureSetPoint + 0.25))
-       {
-         Serial.print("D");     
-         server.write("sent ON command to basement node");  
-         server.write(carriageReturn);
-         server.write(newLine);    
-       }       
+     if(maintainTemperature && tempAmbient != - 127.0 && tempAmbient != 0.0)//only act when good sensor data is present and maintainTemperature is enabled
+     {       
+         //turn the furnace off if necessary 
+       if(tempAmbient > (tempSetPoint + tempHysterisis))
+        {
+           furnaceStatus = false;//prevent furnace from turning on in the next loop
+           Serial.print("D");     
+           server.write("sent OFF command to basement node");  
+           server.write(carriageReturn);
+           server.write(newLine);  
+         }  
+          // turn the furnace on if necessary
+        if(furnaceStatus || (tempAmbient < (tempSetPoint - tempHysterisis)))
+          {
+             furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
+             Serial.print("C");//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
+             server.write("sent ON command to basement node");  
+             server.write(carriageReturn);
+             server.write(newLine);            
+          }
+                 
      }
-   }  
+
+   }
+    
      
-   }  
-  }
+    
+   }  //end of while(client.connected())
+     
+ }// end of main loop  
+  
    
    //See if it's time to update the periodic sensors
    tempUpdateCountdown--; //decrement the periodic update timer
