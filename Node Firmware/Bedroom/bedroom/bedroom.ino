@@ -6,7 +6,7 @@
 #define heaterControlRelay         2 //relay to control 300W heater
 #define oneWireBus1               12 // temperature sensor
 #define keypadAnalog              A0 // input from keyPad LCD keypad
-#define loopsPerSecond         50000 // used for estimating the timing for occasional updates
+#define loopsPerSecond            84 // used for estimating the timing for occasional updates
 #define tempUpdateDelay           30 // how many seconds (approx) before updating temperature
 
 
@@ -17,7 +17,8 @@ bool heaterEnabled = false;
 bool heaterOn = false;
 bool debounceHold = false;
 int  debounceDelayms = 200;
-double tempUpdateCountdown;
+int  input = 0;
+unsigned int tempUpdateCountdown = 0;
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
@@ -35,9 +36,11 @@ void setup() {
  
   //Start with the heater off
   digitalWrite(heaterControlRelay, HIGH);
-  sensors1.begin(); // Start up the library for one-wire bus 1
-  
+  sensors1.begin(); // Start up the library for one-wire bus 1  
 }
+
+
+
 
 void loop() {
   //update the display
@@ -77,15 +80,22 @@ void loop() {
   //See if it's time to update the sensors that only update periodically
   if(tempUpdateCountdown == 0) //don't update the temperature sensors every loop because it take too long
   {
-//set the status light on while checking
+//Put a * beside the temperature on the screen while updating
+    lcd.setCursor(11,1);
+    lcd.print("*");
     sensors1.requestTemperatures();
     ambientTemp = sensors1.getTempCByIndex(0);
     tempUpdateCountdown = (tempUpdateDelay * loopsPerSecond) + 1;
-// Turn off the status light
+    lcd.setCursor(11,1);
+    lcd.print(" ");
   }    
+  tempUpdateCountdown--; //decrement the countdown until the next update  
     
     
-  if(readKeypad() == 2) // Up button pressed
+//read and respond to keypad input
+  input = readKeypad();
+  
+  if(input == 2) // Up button pressed
   {
    if(setPoint >= 23.0)
    { 
@@ -98,7 +108,7 @@ void loop() {
     debounceHold = true;
   }
   
-  if(readKeypad() == 3) // Down button pressed
+  if(input == 3) // Down button pressed
   {
     if(setPoint <= 15.0)
     {
@@ -112,7 +122,7 @@ void loop() {
 
   }
   
-  if(readKeypad() == 5)
+  if(input == 5)
   {
     heaterEnabled = !heaterEnabled;
     debounceHold = true;
@@ -147,7 +157,7 @@ int readKeypad()
  int keypadInput;
  keypadInput = analogRead(keypadAnalog);
  
- if(keypadInput < 50)//RIGHT
+ if(keypadInput < 50)
    return 1;
    
  else if (keypadInput > 100 && keypadInput < 150)
