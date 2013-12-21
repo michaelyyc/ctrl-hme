@@ -132,11 +132,14 @@ void loop() {
  //determine if the heater should be turned on or off
  if(ambientTemp < (setPoint - 0.2) && ambientTemp != -127.0)//- 127.0 is a sensor error
   {
-   heaterOn = true;
-   digitalWrite(heaterControlRelay, LOW);//turn the heater on - active LOW
-  }
+   if(heaterEnabled)
+   {
+     heaterOn = true;
+     digitalWrite(heaterControlRelay, LOW);//turn the heater on - active LOW
+   }  
+}
    
-   if(ambientTemp > (setPoint + 0.2) || ambientTemp == -127.0)//-127.0 is a sensor error
+   if(ambientTemp > (setPoint + 0.2) || ambientTemp == -127.0 || !heaterEnabled)//-127.0 is a sensor error
    {
      heaterOn = false;
      digitalWrite(heaterControlRelay, HIGH);//turn the heater off - active LOW

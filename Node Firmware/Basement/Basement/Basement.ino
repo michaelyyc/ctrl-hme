@@ -39,7 +39,7 @@ Furnace and fan can both be controlled by remote command
   #define requestTemp             71 //G
   #define requestHumidity         72 //H
   #define requestMoistureStatus   73 //I
-  #define requestCPUTemp                 74 //J
+  #define requestCPUTemp          74 //J
   
 
   //I/O pin definitions
@@ -49,23 +49,24 @@ Furnace and fan can both be controlled by remote command
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion             0.2
+  #define FWversion             0.3
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
+  #define tempUpdateDelay        30 //how many seconds (approx) between updates of the temperature sensors
+  #define furnaceTimeout        300 //seconds to keep the furnace on if communication is lost while heating
+
 
   //Variables
-  bool furnaceStatus = 0;// 1 = ON, 0 = OFF
-  bool fanStatus = 0; //if repeated attempts to close door don't work, this bit is set and no more attempts are made
-  bool furnaceEnable = 0; //only control the furnace if this is TRUE
+  bool fanStatus = false; //if repeated attempts to close door don't work, this bit is set and no more attempts are made
+  bool furnaceEnable = false; //furnace should be on when this is true
   int i;  //for loops
   int i2; //for loops
   int commandReq = 0; //variable to store the request from the controller
   float tempAmbient = -1; //temperature from Zone 1 in degrees C
   float CPUTemp = -1;
-  float tempSetPoint = 18.5; // the temperature set point used in combination with furnaceEnable variable
   bool lightStatus;
-  double tempUpdateDelay = 30; //how many seconds (approx) between updates of the temperature sensors
-  double tempUpdateCountdown;
+  long int tempUpdateCountdown;
+  long int furnaceTimeoutCountdown;
 
   // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
  OneWire oneWire1(oneWireBus1);
@@ -107,24 +108,21 @@ void loop() {
     digitalWrite(statusLight, LOW);
   }
   
-  //Disable the furnace in the event of a bad reading from the temperature sensor
-  if(tempAmbient < 10 || tempAmbient > 30)
-  {
-    furnaceEnable = 0;
-  }
+  
   
 //Decide whether to turn furnace ON or OFF
-  if(furnaceEnable && (tempAmbient < tempSetPoint))
+
+//Is the timeout counter expired OR has furnace been disabled?
+  if(furnaceTimeoutCountdown == 0 || !furnaceEnable)
+  {
+    digitalWrite(furnaceControlRelay, HIGH); //active LOW - turn furnace OFF
+  }
+
+//Is timeoutcounter != 0 AND furnace is enabled?
+  if(furnaceEnable && furnaceTimeoutCountdown != 0)
   {
     digitalWrite(furnaceControlRelay, LOW); //active LOW - turn furnace ON
-    furnaceStatus = 1;
-  }
-  
-  if((tempAmbient >= (tempSetPoint + 0.5)) || (!furnaceEnable)) // keep furnace on until set point exceeded by 0.5 degrees or !furnaceEnable
-  {
-    digitalWrite(furnaceControlRelay, HIGH);// active LOW - turn furnace OFF
-    furnaceStatus = 0;
-
+    furnaceTimeoutCountdown--; //decrement the counter for furnace timeout countdown
   }
   
   //decrement the periodic sensor update counter
@@ -194,12 +192,15 @@ void commandReply()
   if(commandReq == turnFurnaceOn)
   {
       furnaceEnable = true;
-      Serial.print("BF1");     
+      Serial.print("BF1"); 
+      furnaceTimeoutCountdown = (furnaceTimeout * loopsPerSecond) + 1;
+    
   }
   
   if(commandReq == turnFurnaceOff)
   {
     furnaceEnable = false;
+    furnaceTimeoutCountdown = 0;
     Serial.print("Bf1");
   }
   
@@ -213,6 +214,7 @@ void commandReply()
   if(commandReq == turnFurnaceAndFanOff)
   {
     Serial.print("Bv1");
+    furnaceEnable = false;
     digitalWrite(furnaceControlRelay, HIGH);
     digitalWrite(fanControlRelay, HIGH);
     return;
@@ -237,7 +239,7 @@ void commandReply()
   if(commandReq == requestFurnaceStatus)
   {
     Serial.print("BS");
-    if(furnaceStatus)
+    if(furnaceEnable)
       Serial.print("1");
     else
       Serial.print("0");
