@@ -262,8 +262,14 @@ void loop()
          server.write("7 : Turn on Block Heater");  
          server.write(newLine);
          server.write(carriageReturn);
-         server.write("8 : Turn off Block Heater");       
+         server.write("8 : Turn off Block Heater");  
+         server.write(newLine);
+         server.write(carriageReturn);
+         server.write("a : Request outside temperature");  
+             
      
+         server.write(newLine);
+         server.write(carriageReturn);
          server.write(newLine);
          server.write(carriageReturn);
          server.write(newLine);
