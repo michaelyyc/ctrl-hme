@@ -30,7 +30,7 @@
 //Constants
 	#define oneWireBus1                   7 // Temperature Sensor
 	#define baud                       9600 // serial port baud rate
-	#define FWversion                  0.16 // FW version
+	#define FWversion                  0.17 // FW version
 	#define tempMaximumAllowed         23.0// maximum temperature
 	#define tempMinimumAllowed         17.0 //minimum temperature
 
@@ -44,8 +44,8 @@
   	#define listCommands              63 // ?
   	#define logOff                   120 // x
   
-  	#define newLine                   12 // NEW LINE
-  	#define carriageReturn            13 
+  	#define newLine                   10 // ASCII NEW LINE
+  	#define carriageReturn            13 // ASCII Carriage return
 
 
 /* NETWORK CONFIGURATION
