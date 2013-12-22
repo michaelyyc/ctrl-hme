@@ -1,13 +1,15 @@
+#include <Password.h>
 #include <SPI.h>
 #include <Ethernet.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
 
 
+
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.13 // FW version
+#define FWversion                  0.14 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
 
@@ -19,6 +21,7 @@
   #define increaseTempSetPoint      79 //O
   #define decreaseTempSetPoint      80 //P
   #define listCommands              63 // ?
+  #define logOff                   120 // x
   
   #define newLine                   12 // NEW LINE
   #define carriageReturn            13 
@@ -43,10 +46,14 @@ double tempUpdateCountdown;
 double tempUpdateDelay = 30;
 double loopsPerSecond = 15000;
 char * convertedFloat;
-bool maintainTemperature = false;
-bool furnaceStatus = false;
 float tempSetPoint = 21.5;
 float tempHysterisis = 0.25;
+bool maintainTemperature = false;
+bool furnaceStatus = false;
+bool validPassword = false;
+Password password = Password( "1234" );
+
+
 
 // telnet defaults to port 23
 EthernetServer server = EthernetServer(23);
@@ -75,7 +82,9 @@ void setup()
 
 void loop()
 {
-
+  // clear the valid password flag from any previous user
+  validPassword = false;
+  
   // if an incoming client connects, there will be bytes available to read:
  
   EthernetClient client = server.available();
@@ -87,11 +96,52 @@ void loop()
  //Found that the Apple telnet client sends 26 bytes of data once connection is established.
  // same thing happens with iTelnet client for iPhone, probably a standard Telnet protocol thing
  // Client trying to negotiate connecrtion? This sketch just ignores the first 26 bytes
-   for(i = 0; i < 24; i++)
+   for(i = 0; i < 25; i++)
    {
-      inputChar = client.read();// read in the data but don't do anything with it.
+     if(client.available()) 
+     inputChar = client.read();// read in the data but don't do anything with it.
    }
- //  server.write("Hello Client");
+  
+
+ // Get the password first 
+   server.write("Enter password: ");
+   while(!validPassword && client.connected())
+   {
+     
+     if(client.available())
+     {
+       inputChar = client.read();
+       switch (inputChar){
+      case '!': //reset password
+        password.reset();
+       //  server.write("\tPassword is reset!");
+      break;
+      case '?': //evaluate password
+        if (password.evaluate()){
+          server.write("Logged in successfully");
+          server.write(newLine);
+          server.write(carriageReturn);
+          password.reset();
+          validPassword = true;
+
+        }else{
+          server.write("Login Failed - Disconnecting");
+          client.stop();
+          password.reset();
+        }
+      break;
+      default: //append any keypress that is not a '!' nor a '?' to the currently guessed password.
+        if(inputChar > 47 && inputChar < 123)
+          {
+          password << inputChar;
+          }
+        }
+     }
+     
+   }
+ 
+ 
+ 
    server.write("Welcome! Type '?' for a list of commands");
    server.write(newLine);
    server.write(carriageReturn);
@@ -103,10 +153,10 @@ void loop()
        inputChar = client.read();
      
           //disabled door opening and closing for security reasons until authentication features added
-       if(inputChar == 51)
+ /*      if(inputChar == 51)
        {
          server.write("Door open/close locked");
-       }
+       }*/
        
        if(inputChar == requestFWVer)
        {
@@ -129,6 +179,7 @@ void loop()
        if(inputChar == enableFurnace)
        {
          maintainTemperature = true;
+         furnaceStatus = false; //set this false to require a new temperature comparison before sending first ON command to furnace
          server.write("Furnace enabled, maintain ");
          server.print(tempSetPoint);
          server.write(" deg C at upstairs sensor");
@@ -170,6 +221,12 @@ void loop()
          }
          else
            server.write("Minimum Temperature Already Reached");
+       }
+       
+       if(inputChar == logOff)
+       {
+         server.write("Goodbye!   ");
+         client.stop();
        }
        
        if(inputChar == listCommands)
@@ -261,6 +318,9 @@ void loop()
          server.write(newLine);    
          server.write(carriageReturn);
          server.write(newLine);   
+         server.write("x : Log off");
+         server.write(carriageReturn);
+         server.write(newLine);   
        }  
   
   
@@ -285,8 +345,37 @@ void loop()
    {
      tempAmbient = readAmbientTemp();
      tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
-        
-     //Control furnace by sending commands to the basement node based on tempAmbient
+     controlFurnace();   
+   }
+    
+     
+    
+   }  //end of while(client.connected())
+     
+ }// end of main loop  
+  
+   
+   //See if it's time to update the periodic sensors
+   tempUpdateCountdown--; //decrement the periodic update timer
+   if(tempUpdateCountdown < 1)
+   {
+     tempAmbient = readAmbientTemp();
+     tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
+     controlFurnace();
+   }  
+}
+
+float readAmbientTemp()
+{
+    float temp;
+    sensors1.requestTemperatures();
+    temp = sensors1.getTempCByIndex(0);   
+    return temp;
+}
+
+void controlFurnace()
+{
+       //Control furnace by sending commands to the basement node based on tempAmbient
 
       if(tempAmbient == -127.0 || tempAmbient == 0.0) //sensor error, disable furnace
       {
@@ -303,7 +392,9 @@ void loop()
         {
            furnaceStatus = false;//prevent furnace from turning on in the next loop
            Serial.print("D");     
-           server.write("sent OFF command to basement node");  
+           server.write("sent OFF command to basement node ");  
+           server.print(tempAmbient);
+           server.write(" deg C");
            server.write(carriageReturn);
            server.write(newLine);  
          }  
@@ -312,47 +403,13 @@ void loop()
           {
              furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
              Serial.print("C");//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
-             server.write("sent ON command to basement node");  
+             server.write("sent ON command to basement node "); 
+             server.print(tempAmbient);
+             server.write(" deg C"); 
              server.write(carriageReturn);
              server.write(newLine);            
           }
                  
      }
-
-   }
-    
-     
-    
-   }  //end of while(client.connected())
-     
- }// end of main loop  
-  
-   
-   //See if it's time to update the periodic sensors
-   tempUpdateCountdown--; //decrement the periodic update timer
-   if(tempUpdateCountdown < 1)
-   {
-     tempAmbient = readAmbientTemp();
-     tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
-   }  
-}
-
-float readAmbientTemp()
-{
-    float temp;
-    sensors1.requestTemperatures();
-    temp = sensors1.getTempCByIndex(0);
-    server.write("Updated temp: ");
-    server.print(temp);
-    server.write(carriageReturn);
-    server.write(newLine);
-    if(temp == -127.0 || temp == 0.0)
-      {
-         server.write("WARNING! Temp sensor error");
-         server.write(carriageReturn);
-         server.write(newLine);    
-      }
-    
-    return temp;
 }
 
