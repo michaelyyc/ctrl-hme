@@ -328,6 +328,8 @@ void commandReply()
 
   if(commandReq == requestDoorStatus) //command is to return door status 0 = open, 1 = closed
       {
+        doorStatus = digitalRead(doorStatusPin); //make sure to send a current value
+
         Serial.print("GS");//send command reply prefix  
         if(doorError)
         {
