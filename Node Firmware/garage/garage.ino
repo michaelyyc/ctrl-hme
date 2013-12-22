@@ -52,7 +52,7 @@ The temperature sensors are DS18B20
   #define statusLight            13 //status indicator light on board
   #define doorControlRelay        2 //door control relay
   #define oneWireBus1             3 //inside temperature sensor
-  #define oneWireBus2            11 //outside temperature sensor
+  #define oneWireBus2             4 //outside temperature sensor
   #define relay120V1              5 //relay for 120V AC power (block heater)
    
   //Constants
@@ -88,7 +88,7 @@ void setup() {
   // initialize serial communication at 9600 bits per second:
   Serial.begin(baud);
   pinMode(doorControlRelay, OUTPUT);//pin connected to relay that signals door opener/closer
-  digitalWrite(doorControlRealy, LOW);// initialize pin to low
+  digitalWrite(doorControlRelay, HIGH);// initialize pin to HIGH
   pinMode(statusLight, OUTPUT);//status light on board
   digitalWrite(statusLight, LOW);// initialize pin to low
   pinMode(doorStatusPin, INPUT);//garage door sensor (1 = closed, 0 = open)
@@ -181,9 +181,9 @@ void loop() {
   if(doorStatus == 1) // Door is closed, open it
   {
      //Serial.println("going from closed to open");
-     digitalWrite(doorControlRelay, HIGH);
-     delay(200);   //leave relay closed for this amount of time (ms)
      digitalWrite(doorControlRelay, LOW);
+     delay(200);   //leave relay closed for this amount of time (ms)
+     digitalWrite(doorControlRelay, HIGH);
      delay(200);
      //Don't confirm door status change for opening
      return;
@@ -192,9 +192,9 @@ void loop() {
     if(doorStatus == 0)  // Door is open, close it and confirm it closes
   {
     // Serial.println("going from open to closed");
-     digitalWrite(doorControlRelay, HIGH);
-     delay(200);   //leave relay closed for this amount of time (ms)
      digitalWrite(doorControlRelay, LOW);
+     delay(200);   //leave relay closed for this amount of time (ms)
+     digitalWrite(doorControlRelay, HIGH);
      
      // Wait 20 seconds to allow the door to close fully, but answer requests that come during this time
    //   Serial.println("waiting for door to close");
@@ -226,9 +226,9 @@ void loop() {
        //Serial.println("ERROR: Door didn't close");
        //Serial.println("Try again...");
        digitalWrite(statusLight, HIGH);
-       digitalWrite(doorControlRelay, HIGH);
-       delay(200);   //leave relay closed for this amount of time (ms)
        digitalWrite(doorControlRelay, LOW);
+       delay(200);   //leave relay closed for this amount of time (ms)
+       digitalWrite(doorControlRelay, HIGH);
      // Wait 20 seconds to allow the door to close fully, but answer requests that come during this time
        //Serial.println("waiting for door to close");
 
