@@ -1,3 +1,25 @@
+/*
+	This code is part of my home control project which includes multiple nodes
+	This is the code for the controller node located inside the house
+	This node is connected to an Ethernet Shield and 1-wire temperature sensor
+	and an XBEE module connected to the the rest of the nodes via a wireless network
+	
+	The main function is to run a telnet server which, in this version, works as a 
+	relay of text commands from the telnet client. Some commands are handled directly
+	by the controller node, mainly the command listing and reading the temperature sensor
+	
+	The XBEE module on this node is configured as coordinator and connected to the serial
+	port. Anything sent to the serial port on this node will be received at all other nodes.
+	Data received at this node's serial port can be from any other node.
+	
+	The furnace (basement node) can be controlled by the "MaintainTemp" and "tempSetPoint"
+	variables in this node. These variables can be set by the telnet client
+
+
+	Michael Bladon
+	Dec 21, 2013
+*/
+
 #include <Password.h>
 #include <SPI.h>
 #include <Ethernet.h>
@@ -5,59 +27,71 @@
 #include <OneWire.h>
 
 
-
 //Constants
-#define oneWireBus1                   7 // Temperature Sensor
-#define baud                       9600 // serial port baud rate
-#define FWversion                  0.14 // FW version
-#define tempMaximumAllowed         23.0// maximum temperature
-#define tempMinimumAllowed         17.0 //minimum temperature
+	#define oneWireBus1                   7 // Temperature Sensor
+	#define baud                       9600 // serial port baud rate
+	#define FWversion                  0.16 // FW version
+	#define tempMaximumAllowed         23.0// maximum temperature
+	#define tempMinimumAllowed         17.0 //minimum temperature
 
-//Temporary commands for using local sensors instead of telnet relay
-  #define requestFWVer              75 //K
-  #define requestTemp               76 //L
-  #define enableFurnace             77 //M
-  #define disableFurnace            78 //N
-  #define increaseTempSetPoint      79 //O
-  #define decreaseTempSetPoint      80 //P
-  #define listCommands              63 // ?
-  #define logOff                   120 // x
+//Commands for using local sensors instead of telnet relay
+  	#define requestFWVer              75 //K
+  	#define requestTemp               76 //L
+ 	#define enableFurnace             77 //M
+  	#define disableFurnace            78 //N
+  	#define increaseTempSetPoint      79 //O
+  	#define decreaseTempSetPoint      80 //P
+  	#define listCommands              63 // ?
+  	#define logOff                   120 // x
   
-  #define newLine                   12 // NEW LINE
-  #define carriageReturn            13 
+  	#define newLine                   12 // NEW LINE
+  	#define carriageReturn            13 
 
 
-// network configuration.  gateway and subnet are optional.
- // the media access control (ethernet hardware) address for the shield:
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  
-//the IP address for the shield:
-byte ip[] = { 192, 168, 1, 230 };    
-// the router's gateway address:
-byte gateway[] = { 10, 0, 0, 1 };
-// the subnet:
-byte subnet[] = { 255, 255, 0, 0 };
-char inputChar;
-int i = 0;
-int updateCounter = 0;
-float tempAmbient;
-OneWire oneWire1(oneWireBus1);  // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
-DallasTemperature sensors1(&oneWire1);  // Pass our oneWire reference to Dallas Temperature. 
-double tempUpdateCountdown;
-double tempUpdateDelay = 30;
-double loopsPerSecond = 15000;
-char * convertedFloat;
-float tempSetPoint = 21.5;
-float tempHysterisis = 0.25;
-bool maintainTemperature = false;
-bool furnaceStatus = false;
-bool validPassword = false;
-Password password = Password( "1234" );
+/* NETWORK CONFIGURATION
+These variables are required to configure the Ethernet shield
+The shield must be assigned a local static IP address that doesn't conflict
+on the network. It DOES NOT have DHCP capabilities for Dynamic IP 
+
+To reach this server from outside the local network, port forwarding
+or VPN must be setup on the router
+*/
+
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
+byte ip[] = { 192, 168, 1, 230 };   // IP Address
+byte gateway[] = { 10, 0, 0, 1 }; //Gateway (optional, not used)
+byte subnet[] = { 255, 255, 0, 0 }; //Subnet
+
+EthernetServer server = EthernetServer(23); //Set up the ethernet server on port 23 (standard telnet port)
+
+/* 1-WIRE Configuration 
+A DS18B20 1-wire temperature sensor is connected on pin defined as OneWireBus1
+These commands setup the OneWire instance and pass the reference to the Dallas Temperature
+class that will be used to read the temperature from the device
+*/
+OneWire oneWire1(oneWireBus1);  
+DallasTemperature sensors1(&oneWire1);
 
 
+//Global Variables
+char inputChar;	//store the value input from the serial port or telnet client
+int i = 0; //for for loops
+float tempAmbient; //value used to store ambient temperature as measured by 1-wire sensor
+double tempUpdateCountdown; //A countdown is used to update the temperature value periodically, not every loop
+double tempUpdateDelay = 30; //Roughly the number of seconds between temp updates
+double loopsPerSecond = 15000; //Roughly the number of times the main loop is processed each second
+float tempSetPoint = 21.5; //The setPoint temperature
+float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
+bool maintainTemperature = false; //Furnace ON/Off commands are only sent if this is true
+bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
+bool validPassword = false; //This is true any time a valid user is logged in
+Password password = Password( "1234" ); //The password is hardcoded. Change this value before compiling
 
-// telnet defaults to port 23
-EthernetServer server = EthernetServer(23);
 
+/* SETUP - RUN ONCE
+	Setup function initializes some variables and sets up the serial and ethernet ports
+	this takes about 1 second to run
+*/
 void setup()
 {
   // Initialize the counter for periodic sensor updates
@@ -82,28 +116,33 @@ void setup()
 
 void loop()
 {
+  // This loop waits for a client to connect. While waiting, the temperature is updated
+  // Periodically and the furnace control function is called to maintain temperature if
+  // appropriately configured.
+  
   // clear the valid password flag from any previous user
   validPassword = false;
   
   // if an incoming client connects, there will be bytes available to read:
  
   EthernetClient client = server.available();
-  if (client == true) {
- //   Serial.println("Client connected...");
- //   Serial.println("ignoring 26 bytes..."); 
+  if (client == true) 
+  {
  
- 
- //Found that the Apple telnet client sends 26 bytes of data once connection is established.
- // same thing happens with iTelnet client for iPhone, probably a standard Telnet protocol thing
- // Client trying to negotiate connecrtion? This sketch just ignores the first 26 bytes
-   for(i = 0; i < 25; i++)
-   {
-     if(client.available()) 
-     inputChar = client.read();// read in the data but don't do anything with it.
-   }
+ //Found that the some telnet clients send 24-26 bytes of data once connection is established.
+ // Client trying to negotiate connecrtion? This sketch just ignores the first 250ms of data
+  	delay(250); //wait 250ms for incoming data from the client
+   while(client.available())
+   	{
+        inputChar = client.read();// read in the data but don't do anything with it.
+	}
   
 
- // Get the password first 
+ // Prompt for password and compare to the actual value
+ // The user must terminate password with '?' 
+ // Typing errors can be cleared by sending '!'
+ // If the password is wrong, the client will be disconnected and server will wait
+ // for 30 seconds
    server.write("Enter password: ");
    while(!validPassword && client.connected())
    {
@@ -117,47 +156,54 @@ void loop()
        //  server.write("\tPassword is reset!");
       break;
       case '?': //evaluate password
-        if (password.evaluate()){
+        if (password.evaluate())
+        {
           server.write("Logged in successfully");
           server.write(newLine);
           server.write(carriageReturn);
           password.reset();
           validPassword = true;
 
-        }else{
+        }
+        else
+        {
           server.write("Login Failed - Disconnecting");
           client.stop();
           password.reset();
-        }
+          delay(30000); //Wait a minute before allowing any more connections
+      }
       break;
-      default: //append any keypress that is not a '!' nor a '?' to the currently guessed password.
+      default: //append any ascii input characters that are not a '!' nor a '?' to the currently entered password.
         if(inputChar > 47 && inputChar < 123)
           {
           password << inputChar;
           }
-        }
-     }
+    }
+	}
      
    }
  
  
- 
-   server.write("Welcome! Type '?' for a list of commands");
-   server.write(newLine);
-   server.write(carriageReturn);
-   
-   while(client.connected())
+ 	//WELCOME MESSAGE - Displayed only at start of session
+   if(validPassword)
    {
-     if(client.available())
+     server.write("Welcome! Type '?' for a list of commands");
+     server.write(newLine);
+     server.write(carriageReturn);
+   } 
+   
+   //Connected Loop - this is repeated as long as the client is connected
+   //The loop relays data between the telnet client and the serial port (XBEE network)
+   //Certain commands are handed by this node directly to the telnet client without any serial communication
+   //Only ascii data is relayed from the telnet client to the serial port
+      while(client.connected())
+   {
+     if(client.available()) //This is true if the telnet client has sent any data
      {
-       inputChar = client.read();
+       inputChar = client.read(); //read in the client data
      
-          //disabled door opening and closing for security reasons until authentication features added
- /*      if(inputChar == 51)
-       {
-         server.write("Door open/close locked");
-       }*/
-       
+  
+  // COMMANDS HANDLED BY THIS NODE  
        if(inputChar == requestFWVer)
        {
          server.write("Controller FW version: ");
@@ -326,11 +372,11 @@ void loop()
          server.write(newLine);   
          server.write("x : Log off");
          server.write(carriageReturn);
-         server.write(newLine);   
+         server.write(newLine); 
        }  
   
-  
-  //For commands not handled by the controller node directly, relay them to the XBEE network
+  //COMMANDS NOT HANDLED BY THIS NODE
+  //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
     if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
        {
          Serial.print(inputChar);
@@ -341,6 +387,7 @@ void loop()
        
      }
 
+	//RELAY SERIAL DATA TO TELNET CLIENT
      if(Serial.available())
      {
        inputChar = Serial.read();//read the serial input
@@ -353,12 +400,9 @@ void loop()
      tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
      controlFurnace();   
    }
-    
+  }  //end of while(client.connected())
      
-    
-   }  //end of while(client.connected())
-     
- }// end of main loop  
+ }//end of if(client == true)
   
    
    //See if it's time to update the periodic sensors
@@ -369,7 +413,13 @@ void loop()
      tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
      controlFurnace();
    }  
-}
+}// END OF THE MAIN LOOP FUNCTION
+
+
+/* readAmbientTemp()
+	This function collects a temperature reading in degrees C from the 1-wire
+	sensor and returns it as a float
+*/
 
 float readAmbientTemp()
 {
@@ -378,6 +428,12 @@ float readAmbientTemp()
     temp = sensors1.getTempCByIndex(0);   
     return temp;
 }
+
+/* controlFurnace()
+	This function sends ON/OFF commands to the basement node to control the furnace
+	This is doen via the serial port which is connected to the XBEE network.
+	This function relies on global variables and takes no inputs
+*/
 
 void controlFurnace()
 {
@@ -417,5 +473,7 @@ void controlFurnace()
           }
                  
      }
+     return;
 }
+
 
