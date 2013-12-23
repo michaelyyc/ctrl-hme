@@ -26,14 +26,14 @@
 #include <Ethernet.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
-#include <floatFromSerial.h>
+#include <valueFromSerial.h>
 #include <commandDefinitionsAlt.h>
 
 
 //Constants
 	#define oneWireBus1                   7 // Temperature Sensor
 	#define baud                       9600 // serial port baud rate
-	#define FWversion                  0.18 // FW version
+	#define FWversion                  0.19 // FW version
 	#define tempMaximumAllowed         23.0// maximum temperature
 	#define tempMinimumAllowed         17.0 //minimum temperature
 //ASCII values
@@ -69,10 +69,7 @@ DallasTemperature sensors1(&oneWire1);
 //Global Variables
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
-float tempAmbient; //value used to store ambient temperature as measured by 1-wire sensor
-float tempOutdoor;  //value used to store outdoor temperature as received from the garage node
-float tempGarage; //value used to store garage temperature as measured from the garage node
-float tempBasement; //value used to store basement temperature as measured from the basement node
+float tempAmbient = -127.0; //value used to store ambient temperature as measured by 1-wire sensor
 double tempUpdateCountdown; //A countdown is used to update the temperature value periodically, not every loop
 double tempUpdateDelay = 30; //Roughly the number of seconds between temp updates
 double loopsPerSecond = 15000; //Roughly the number of times the main loop is processed each second
@@ -83,6 +80,14 @@ bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
 bool validPassword = false; //This is true any time a valid user is logged in
 Password password = Password( "1234" ); //The password is hardcoded. Change this value before compiling
 
+//Global variables from the basement node
+float basementTempAmbient = -127.0; //value used to store basement temperature as measured from the basement node
+
+
+//Global variables from Garage Node
+float garageTempOutdoor = -127.0;  //value used to store outdoor temperature as received from the garage node
+float garageTempAmbient = -127.0; //value used to store garage temperature as measured from the garage node
+bool garageDoorStatus = false;
 
 /* SETUP - RUN ONCE
 	Setup function initializes some variables and sets up the serial and ethernet ports
@@ -371,7 +376,56 @@ void loop()
          server.write(newLine); 
        }  
   
-  //COMMANDS NOT HANDLED BY THIS NODE
+
+  //Defined commands not handled by this node
+  //relay them and store results in variables in the controller
+    if(inputChar == grge_requestTempZone2)
+    {
+       Serial.print(grge_requestTempZone2); //relay the command to the serial port
+       garageTempOutdoor = floatFromSerial('!');
+       server.write("Outdoor Temperature is: ");
+       server.print(garageTempOutdoor);
+       server.write(" deg C");
+       server.write(newLine);
+       server.write(carriageReturn);
+    }
+    
+    if(inputChar == grge_requestTempZone1)
+    {
+       Serial.print(grge_requestTempZone1);
+       garageTempAmbient = floatFromSerial('!'); 
+       server.write("Garage Temperature is: ");
+       server.print(garageTempAmbient);
+       server.write(" deg C");
+       server.write(newLine);
+       server.write(carriageReturn);
+    }
+    
+    if(inputChar == grge_requestDoorStatus)
+    {
+       Serial.print(grge_requestDoorStatus);
+       garageDoorStatus = boolFromSerial();
+       server.write("Garage door is ");
+       if(garageDoorStatus)
+         server.write("closed");
+       else
+         server.write("open");
+       server.write(newLine);
+       server.write(carriageReturn);
+    }
+    
+    if(inputChar == bsmt_requestTemp)
+    {
+      Serial.print(bsmt_requestTemp);
+      basementTempAmbient = floatFromSerial('!');
+      server.write("Basement Temperature is: ");
+      server.print(basementTempAmbient);
+      server.write(" deg C");
+      server.write(newLine);
+      server.write(carriageReturn);
+    }
+    
+  //ALL OTHER COMMANDS
   //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
     if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
        {
