@@ -25,13 +25,12 @@ void loop() {
 		The first ASCII character 0-9 on the serial port
 		until the next delimiter character is received as a delimiter
 	Other non-numeric / '.' / 'delimiter'  are ignored
-	There is no timeout or filter on the data, if the serial port
-	never receives '!' this function never returns.
+	There is a 1 second watchdog timer, if this expires the function returns -1111
 
         As input, this function takes an integer value indicating the delimiter 
         to search for as the end of the floating point value
         
-        If no serial input is available when this function is called, it will return -1.0
+        If no serial input is available when this function is called, it will return -2222
 */
 float floatFromSerial(int delimiter)
 {
@@ -40,13 +39,19 @@ float floatFromSerial(int delimiter)
 	float isDecimal = 0;  //keep track of how many times to divide by 10
 		              // when processing decimal inputs
         int inputByte;	      //store the byte read from the serial port
+        int startTime = millis();
         
         if(!Serial.available())
-          return -1.0;
+          return -2222;
         
 	while (1)//Do this loop until it is broken out of by the delimiter
 	{
-		inputByte = Serial.read();
+		if(millis() > (startTime + 1000))
+                {
+                    return -1111;
+                }
+  
+                inputByte = Serial.read();
 		if(inputByte == delimiter) //delimiter for end of float
 		{
 			break;//break out of the whole loop
