@@ -1,0 +1,1 @@
+float floatFromSerial(int delimiter);
