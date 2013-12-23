@@ -1,12 +1,12 @@
 //CONTROLLER COMMANDS
-  	#define ctrl_requestFWVer              75 //K
-  	#define ctrl_requestTemp               76 //L
- 	#define ctrl_enableFurnace             77 //M
-  	#define ctrl_disableFurnace            78 //N
-  	#define ctrl_increaseTempSetPoint      79 //O
-  	#define ctrl_decreaseTempSetPoint      80 //P
-  	#define ctrl_listCommands              63 // ?
-  	#define ctrl_logOff                   120 // x
+  #define ctrl_requestFWVer              75 //K
+  #define ctrl_requestTemp               76 //L
+  #define ctrl_enableFurnace             77 //M
+  #define ctrl_disableFurnace            78 //N
+  #define ctrl_increaseTempSetPoint      79 //O
+  #define ctrl_decreaseTempSetPoint      80 //P
+  #define ctrl_listCommands              63 // ?
+  #define ctrl_logOff                   120 // x
 
 //BASEMENT COMMANDS
 //Commands from the controller

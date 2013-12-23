@@ -33,7 +33,7 @@
 //Constants
 	#define oneWireBus1                   7 // Temperature Sensor
 	#define baud                       9600 // serial port baud rate
-	#define FWversion                  0.19 // FW version
+	#define FWversion                  0.20 // FW version
 	#define tempMaximumAllowed         23.0// maximum temperature
 	#define tempMinimumAllowed         17.0 //minimum temperature
 //ASCII values
@@ -381,7 +381,7 @@ void loop()
   //relay them and store results in variables in the controller
     if(inputChar == grge_requestTempZone2)
     {
-       Serial.print(grge_requestTempZone2); //relay the command to the serial port
+       Serial.print(char(grge_requestTempZone2)); //relay the command to the serial port
        garageTempOutdoor = floatFromSerial('!');
        server.write("Outdoor Temperature is: ");
        server.print(garageTempOutdoor);
@@ -392,7 +392,7 @@ void loop()
     
     if(inputChar == grge_requestTempZone1)
     {
-       Serial.print(grge_requestTempZone1);
+       Serial.print(char(grge_requestTempZone1));
        garageTempAmbient = floatFromSerial('!'); 
        server.write("Garage Temperature is: ");
        server.print(garageTempAmbient);
@@ -403,7 +403,7 @@ void loop()
     
     if(inputChar == grge_requestDoorStatus)
     {
-       Serial.print(grge_requestDoorStatus);
+       Serial.print(char(grge_requestDoorStatus));
        garageDoorStatus = boolFromSerial();
        server.write("Garage door is ");
        if(garageDoorStatus)
@@ -416,7 +416,7 @@ void loop()
     
     if(inputChar == bsmt_requestTemp)
     {
-      Serial.print(bsmt_requestTemp);
+      Serial.print(char(bsmt_requestTemp));
       basementTempAmbient = floatFromSerial('!');
       server.write("Basement Temperature is: ");
       server.print(basementTempAmbient);
