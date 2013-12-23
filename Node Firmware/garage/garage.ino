@@ -1,5 +1,6 @@
 #include <DallasTemperature.h>
 #include <OneWire.h>
+#include <commandDefinitionsAlt.h>
 
 /*
 Garage door monitor
@@ -12,41 +13,6 @@ The temperature sensors are DS18B20
 
 */
 
-/*
-//Commands from the controller
-  #define requestFWVer            0
-  #define requestDoorStatus       1
-  #define requestTempZone1        2
-  #define requestActivateDoor     3
-  #define requestAutoCloseStatus  4
-  #define requestDisableAutoClose 5
-  #define requestEnableAutoClose  6
-  #define requestActivate120V1      7
-  #define requestDeactivate120V1  8
-  #define requestCPUtemp          9
-  #define requestTempZone2       10
-  #define requestClearErrorFlag  11
-  #define requestPowerSupplyV    12
-  */
-  
-  
-  
-//Alternate commands for 0-9, a-z in ASCII for debugging with a keyboard
-  #define requestFWVer            48 //0
-  #define requestDoorStatus       49 //1
-  #define requestTempZone1        50 //2
-  #define requestActivateDoor     51 //3
-  #define requestAutoCloseStatus  52 //4
-  #define requestDisableAutoClose 53 //5
-  #define requestEnableAutoClose  54 //6
-  #define requestActivate120V1    55 //7
-  #define requestDeactivate120V1  56 //8
-  #define requestCPUtemp          57 //9
-  #define requestTempZone2        97 //a
-  #define requestClearErrorFlag   98 //b
-  #define requestPowerSupplyV     99 //c
-  
-
   //I/O pin definitions
   #define doorStatusPin           8 //door sensor connection
   #define statusLight            13 //status indicator light on board
@@ -58,7 +24,7 @@ The temperature sensors are DS18B20
   //Constants
   #define activationTime         15
   #define timeLimit             300
-  #define FWversion             0.3
+  #define FWversion             0.4
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
@@ -319,14 +285,14 @@ void checkRequests()
      
 void commandReply()
 {
-  if(commandReq == requestFWVer) //command is to request FW version
+  if(commandReq == grge_requestFWVer) //command is to request FW version
       {
         Serial.print("Gv"); //send command reply prefix
         Serial.print(FWversion); //send command reply data
         return; 
       }
 
-  if(commandReq == requestDoorStatus) //command is to return door status 0 = open, 1 = closed
+  if(commandReq == grge_requestDoorStatus) //command is to return door status 0 = open, 1 = closed
       {
         doorStatus = digitalRead(doorStatusPin); //make sure to send a current value
 
@@ -342,7 +308,7 @@ void commandReply()
 
 
 
-  if(commandReq ==  requestActivateDoor) //command is to activate door
+  if(commandReq ==  grge_requestActivateDoor) //command is to activate door
       {
         Serial.print("GD"); //send command reply prefix
         //send the opposite of the current door status, converted to an ascii character 
@@ -359,7 +325,7 @@ void commandReply()
       }
 
 
-  if(commandReq == requestAutoCloseStatus)
+  if(commandReq == grge_requestAutoCloseStatus)
   {
     if(autoCloseEnable)
     {
@@ -371,7 +337,7 @@ void commandReply()
     }
     return;
   }
-  if(commandReq == requestEnableAutoClose)
+  if(commandReq == grge_requestEnableAutoClose)
       {
         Serial.print("1");
         autoCloseEnable = 1;
@@ -380,7 +346,7 @@ void commandReply()
 
 
   
-  if(commandReq == requestDisableAutoClose)
+  if(commandReq == grge_requestDisableAutoClose)
       {
         Serial.print("0");
         autoCloseEnable = 0;
@@ -389,14 +355,14 @@ void commandReply()
 
 
   
-  if(commandReq == requestClearErrorFlag)
+  if(commandReq == grge_requestClearErrorFlag)
       {
        doorError = 0;
        Serial.print("1"); 
        return;
       }
 
-  if(commandReq == requestTempZone1)
+  if(commandReq == grge_requestTempZone1)
     {
     Serial.print("GT"); // send the prefix
     Serial.print(tempZone1);  //send the temperature as degrees C
@@ -404,7 +370,7 @@ void commandReply()
     return;
     }
 
-  if(commandReq == requestTempZone2)
+  if(commandReq == grge_requestTempZone2)
     {
     Serial.print("Gw"); // send the prefix
     Serial.print(tempZone2);  //send the temperature as degrees C
@@ -412,21 +378,21 @@ void commandReply()
     return;
     }
 
-  if(commandReq == requestActivate120V1)
+  if(commandReq == grge_requestActivate120V1)
     {
     Serial.print("G11"); // send the reply
     digitalWrite(relay120V1, LOW);// turn on the 120V output (active LOW)
     return;
     }
 
-  if(commandReq == requestDeactivate120V1)
+  if(commandReq == grge_requestDeactivate120V1)
     {
     Serial.print("G10"); // send the reply
     digitalWrite(relay120V1, HIGH);//turn off the 120V output (active LOW)
     return;
     }
     
-  if (commandReq == requestCPUtemp)
+  if (commandReq == grge_requestCPUtemp)
   {
     Serial.print("Gt");
     Serial.print(CPUTemp);
@@ -435,7 +401,7 @@ void commandReply()
   }
   
     
-  Serial.print("!");//reply for unimplemented commands
+//  Serial.print("!");//reply for unimplemented commands
       return;
   
 }

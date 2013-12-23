@@ -1,3 +1,4 @@
+
 /*
 	This code is part of my home control project which includes multiple nodes
 	This is the code for the controller node located inside the house
@@ -25,25 +26,17 @@
 #include <Ethernet.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
+#include <floatFromSerial.h>
+#include <commandDefinitionsAlt.h>
 
 
 //Constants
 	#define oneWireBus1                   7 // Temperature Sensor
 	#define baud                       9600 // serial port baud rate
-	#define FWversion                  0.17 // FW version
+	#define FWversion                  0.18 // FW version
 	#define tempMaximumAllowed         23.0// maximum temperature
 	#define tempMinimumAllowed         17.0 //minimum temperature
-
-//Commands for using local sensors instead of telnet relay
-  	#define requestFWVer              75 //K
-  	#define requestTemp               76 //L
- 	#define enableFurnace             77 //M
-  	#define disableFurnace            78 //N
-  	#define increaseTempSetPoint      79 //O
-  	#define decreaseTempSetPoint      80 //P
-  	#define listCommands              63 // ?
-  	#define logOff                   120 // x
-  
+//ASCII values
   	#define newLine                   10 // ASCII NEW LINE
   	#define carriageReturn            13 // ASCII Carriage return
 
@@ -77,6 +70,9 @@ DallasTemperature sensors1(&oneWire1);
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
 float tempAmbient; //value used to store ambient temperature as measured by 1-wire sensor
+float tempOutdoor;  //value used to store outdoor temperature as received from the garage node
+float tempGarage; //value used to store garage temperature as measured from the garage node
+float tempBasement; //value used to store basement temperature as measured from the basement node
 double tempUpdateCountdown; //A countdown is used to update the temperature value periodically, not every loop
 double tempUpdateDelay = 30; //Roughly the number of seconds between temp updates
 double loopsPerSecond = 15000; //Roughly the number of times the main loop is processed each second
@@ -204,7 +200,7 @@ void loop()
      
   
   // COMMANDS HANDLED BY THIS NODE  
-       if(inputChar == requestFWVer)
+       if(inputChar == ctrl_requestFWVer)
        {
          server.write("Controller FW version: ");
          server.print(FWversion);
@@ -212,7 +208,7 @@ void loop()
          server.write(carriageReturn);
      }
        
-       if(inputChar == requestTemp)
+       if(inputChar == ctrl_requestTemp)
        {
          server.write("Main Floor Temperature: ");
          server.print(tempAmbient);
@@ -222,7 +218,7 @@ void loop()
 
        }
        
-       if(inputChar == enableFurnace)
+       if(inputChar == ctrl_enableFurnace)
        {
          maintainTemperature = true;
          furnaceStatus = false; //set this false to require a new temperature comparison before sending first ON command to furnace
@@ -233,7 +229,7 @@ void loop()
          server.write(carriageReturn);
        }
        
-       if(inputChar == disableFurnace)
+       if(inputChar == ctrl_disableFurnace)
        {
          maintainTemperature = false;
          furnaceStatus = false;
@@ -243,7 +239,7 @@ void loop()
          server.write(carriageReturn);
        }
        
-       if(inputChar == increaseTempSetPoint)
+       if(inputChar == ctrl_increaseTempSetPoint)
        {
          if(tempSetPoint < tempMaximumAllowed)
          {
@@ -256,7 +252,7 @@ void loop()
            server.write("Maximum Temperature already Set");
        }
        
-       if(inputChar == decreaseTempSetPoint)
+       if(inputChar == ctrl_decreaseTempSetPoint)
        {
          if(tempSetPoint > tempMinimumAllowed)
          {
@@ -269,13 +265,13 @@ void loop()
            server.write("Minimum Temperature Already Reached");
        }
        
-       if(inputChar == logOff)
+       if(inputChar == ctrl_logOff)
        {
          server.write("Goodbye!   ");
          client.stop();
        }
        
-       if(inputChar == listCommands)
+       if(inputChar == ctrl_listCommands)
        {
          server.write("You can use these commands....");
          server.write(newLine);

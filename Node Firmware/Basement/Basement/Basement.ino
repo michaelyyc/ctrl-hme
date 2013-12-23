@@ -1,5 +1,6 @@
 #include <DallasTemperature.h>
 #include <OneWire.h>
+#include <commandDefinitionsAlt.h>
 
 /*
 Basement temperature sensor and furnace control
@@ -13,34 +14,8 @@ Furnace and fan can both be controlled by remote command
 
 */
 
-/*
-//Commands from the controller
-  #define requestFWVer            32
-  #define requestFurnaceStatus    33
-  #define turnFurnaceOn           34
-  #define turnFurnaceOff          35
-  #define turnFanOn               36
-  #define turnFurnaceAndFanOff    37
-  #define requestTemp             38
-  #define requestHumidity         39
-  #define requestMoistureStatus   40
-  #define requestCPUTemp          43
-  */
-  
-  
-  
-//Alternate commands for 0-9, a-z in ASCII for debugging with a keyboard
-  #define requestFWVer            65 //A
-  #define requestFurnaceStatus    66 //B
-  #define turnFurnaceOn           67 //C
-  #define turnFurnaceOff          68 //D
-  #define turnFanOn               69 //E
-  #define turnFurnaceAndFanOff    70 //F
-  #define requestTemp             71 //G
-  #define requestHumidity         72 //H
-  #define requestMoistureStatus   73 //I
-  #define requestCPUTemp          74 //J
-  
+
+
 
   //I/O pin definitions
   #define furnaceControlRelay         3 //door sensor connection
@@ -49,7 +24,7 @@ Furnace and fan can both be controlled by remote command
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion             0.3
+  #define FWversion             0.4
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
   #define tempUpdateDelay        30 //how many seconds (approx) between updates of the temperature sensors
@@ -182,14 +157,14 @@ void checkRequests()
      
 void commandReply()
 {
-  if(commandReq == requestFWVer) //command is to request FW version
+  if(commandReq == bsmt_requestFWVer) //command is to request FW version
       {
         Serial.print("Bv"); //send command reply prefix
         Serial.print(FWversion); //send command reply data
         return; 
       }
 
-  if(commandReq == turnFurnaceOn)
+  if(commandReq == bsmt_turnFurnaceOn)
   {
       furnaceEnable = true;
       Serial.print("BF1"); 
@@ -197,21 +172,21 @@ void commandReply()
     
   }
   
-  if(commandReq == turnFurnaceOff)
+  if(commandReq == bsmt_turnFurnaceOff)
   {
     furnaceEnable = false;
     furnaceTimeoutCountdown = 0;
     Serial.print("Bf1");
   }
   
-  if(commandReq == turnFanOn)
+  if(commandReq == bsmt_turnFanOn)
   {
     Serial.print("BV1");
     digitalWrite(fanControlRelay, LOW);
     return;
   }
   
-  if(commandReq == turnFurnaceAndFanOff)
+  if(commandReq == bsmt_turnFurnaceAndFanOff)
   {
     Serial.print("Bv1");
     furnaceEnable = false;
@@ -220,7 +195,7 @@ void commandReply()
     return;
   }
   
-  if(commandReq == requestTemp)
+  if(commandReq == bsmt_requestTemp)
   {
     Serial.print("BT");
     Serial.print(tempAmbient);
@@ -228,7 +203,7 @@ void commandReply()
     return;
   }
   
-  if(commandReq == requestCPUTemp)
+  if(commandReq == bsmt_requestCPUTemp)
   {
     Serial.print("Bt");
     Serial.print(CPUTemp);
@@ -236,7 +211,7 @@ void commandReply()
     return;
   }
 
-  if(commandReq == requestFurnaceStatus)
+  if(commandReq == bsmt_requestFurnaceStatus)
   {
     Serial.print("BS");
     if(furnaceEnable)
@@ -247,7 +222,7 @@ void commandReply()
     return;
   }
   
-  Serial.print("!");//reply for unimplemented commands
+//  Serial.print("!");//reply for unimplemented commands
       return;
 }
 
