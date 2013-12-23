@@ -413,6 +413,15 @@ void loop()
      tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
      controlFurnace();
    }  
+   
+   //If there is no telnet client connected, just read and ignore the serial port
+   //This is to prevent the buffer from filling up when the is no telnet client but nodes are sending data
+   //Only one byte is ignored per loop but the serial port at 9600 baud shouldn't be faster than the main loop
+   if(Serial.available())
+   {
+     Serial.read();
+   }
+   
 }// END OF THE MAIN LOOP FUNCTION
 
 
