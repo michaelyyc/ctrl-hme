@@ -29,7 +29,7 @@ The temperature sensors are DS18B20
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
   //Variables
-  bool doorStatus = 0;// 1 = closed, 0 = open
+  bool doorStatus = 0;// 0 = open, 1 = closed
   bool doorError = 0; //if repeated attempts to close door don't work, this bit is set and no more attempts are made
   bool autoCloseEnable = 1; //1 = enabled , 0 = disabled
   int i;  //for loops
@@ -76,7 +76,7 @@ void loop() {
   checkRequests();
 
   //Read the sensors that get updated every loop
-  doorStatus = digitalRead(doorStatusPin);
+  doorStatus = !digitalRead(doorStatusPin);
   
   //See if it's time to update the sensors that only update periodically
   if(tempUpdateCountdown == 0) //don't update the temperature sensors every loop because it take too long
@@ -115,8 +115,10 @@ void loop() {
         //delay for 10ms
         delay(10);
       }
-
-    if(digitalRead(8))//true if door is closed
+  
+    //Update door status
+    doorStatus = !digitalRead(doorStatusPin);
+    if(doorStatus)//true if door is closed
     {
       digitalWrite(statusLight, LOW);
       break; //jump out of this loop
@@ -179,7 +181,7 @@ void loop() {
       }
 
       //Serial.println("checking door status");
-     doorStatus = digitalRead(doorStatusPin); //check the door status pin
+     doorStatus = !digitalRead(doorStatusPin); //check the door status pin
         
      if(doorStatus == 1) // door successfully closed, go back to monitoring
      {
@@ -213,7 +215,7 @@ void loop() {
         }
       }
 
-      doorStatus = digitalRead(doorStatusPin); // check the door status again
+      doorStatus = !digitalRead(doorStatusPin); // check the door status again
        
      if(doorStatus == 1) // door successfully closed, go back to monitoring
      {
@@ -294,7 +296,7 @@ void commandReply()
 
   if(commandReq == grge_requestDoorStatus) //command is to return door status 0 = open, 1 = closed
       {
-        doorStatus = digitalRead(doorStatusPin); //make sure to send a current value
+        doorStatus = !digitalRead(doorStatusPin); //make sure to send a current value
 
         Serial.print("GS");//send command reply prefix  
         if(doorError)
@@ -402,7 +404,7 @@ void commandReply()
   
     
 //  Serial.print("!");//reply for unimplemented commands
-      return;
+    return;
   
 }
 
