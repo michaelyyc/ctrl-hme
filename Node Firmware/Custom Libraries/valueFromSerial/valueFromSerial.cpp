@@ -9,7 +9,9 @@
 		until the next delimiter character is received as a delimiter
 	Other non-numeric / '.' / 'delimiter'  are ignored
 	
-	There is a timeout function of 500,000 loops - about 6 seconds
+	There is a timeout function of 1,000,000 loops - about 12 seconds
+	This can be made shorter, but in my application, the nodes can sometimes reply very slowly
+	so I keep this long to avoid missing data
 	
         As input, this function takes an integer value indicating the delimiter 
         to search for as the end of the floating point value
@@ -31,7 +33,7 @@ float floatFromSerial(int delimiter)
 	while (1)//Do this loop until it is broken out of by the delimiter
 	{
 
-     	if(loopCounter > 500000)
+     	if(loopCounter > 1000000)
      	{
      		return -1111; // Timeout error
      	}
@@ -92,7 +94,7 @@ bool boolFromSerial()
                      
 	while (1)//Do this loop until it is broken out of by detecting a 1 or 0
 	{
-		if(loopCounter > 500000)//longer timeout counter because timeout
+		if(loopCounter > 1000000)//longer timeout counter because timeout
 							//cannot be discerned from a real false value
      	{
      		return false; // Timeout error
@@ -127,7 +129,7 @@ int intFromSerial(int delimiter)
 	while (1)//Do this loop until it is broken out of by the delimiter
 	{
 		
-		if(loopCounter > 500000)
+		if(loopCounter > 1000000)
      	{
      		return -1111; // Timeout error
      	}
