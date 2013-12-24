@@ -1,4 +1,3 @@
-
 /*
 	This code is part of my home control project which includes multiple nodes
 	This is the code for the controller node located inside the house
@@ -28,6 +27,7 @@
 #include <OneWire.h>
 #include <valueFromSerial.h>
 #include <commandDefinitionsAlt.h>
+#include <privatePasswordFile.h>
 
 
 //Constants
@@ -73,12 +73,13 @@ float tempAmbient = -127.0; //value used to store ambient temperature as measure
 double tempUpdateCountdown; //A countdown is used to update the temperature value periodically, not every loop
 double tempUpdateDelay = 30; //Roughly the number of seconds between temp updates
 double loopsPerSecond = 15000; //Roughly the number of times the main loop is processed each second
+Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.5; //The setPoint temperature
 float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
 bool maintainTemperature = false; //Furnace ON/Off commands are only sent if this is true
 bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
 bool validPassword = false; //This is true any time a valid user is logged in
-Password password = Password( "1234" ); //The password is hardcoded. Change this value before compiling
+bool commandSent = false; //this tracks whether the controller has already relayed the commadn to the network, prevents sending it twice
 
 //Global variables from the basement node
 float basementTempAmbient = -127.0; //value used to store basement temperature as measured from the basement node
@@ -120,9 +121,10 @@ void loop()
   // This loop waits for a client to connect. While waiting, the temperature is updated
   // Periodically and the furnace control function is called to maintain temperature if
   // appropriately configured.
+    
   
   // clear the valid password flag from any previous user
-  validPassword = false;
+  validPassword = false; // Should already be false, but just in case the last session didn't end cleanly
   
   // if an incoming client connects, there will be bytes available to read:
  
@@ -197,7 +199,7 @@ void loop()
    //The loop relays data between the telnet client and the serial port (XBEE network)
    //Certain commands are handed by this node directly to the telnet client without any serial communication
    //Only ascii data is relayed from the telnet client to the serial port
-      while(client.connected())
+      while(validPassword && client.connected())
    {
      if(client.available()) //This is true if the telnet client has sent any data
      {
@@ -211,6 +213,7 @@ void loop()
          server.print(FWversion);
          server.write(newLine);//new line
          server.write(carriageReturn);
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
      }
        
        if(inputChar == ctrl_requestTemp)
@@ -220,6 +223,8 @@ void loop()
          server.write(" deg C");
          server.write(newLine);//new line
          server.write(carriageReturn);
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
+         
 
        }
        
@@ -232,6 +237,7 @@ void loop()
          server.write(" deg C at upstairs sensor");
          server.write(newLine);//new line
          server.write(carriageReturn);
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
        }
        
        if(inputChar == ctrl_disableFurnace)
@@ -242,10 +248,12 @@ void loop()
          server.write("furnace disabled - not maintaining temperature");
          server.write(newLine);//new line
          server.write(carriageReturn);
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
        }
        
        if(inputChar == ctrl_increaseTempSetPoint)
        {
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
          if(tempSetPoint < tempMaximumAllowed)
          {
            tempSetPoint = tempSetPoint + 0.25;
@@ -259,6 +267,7 @@ void loop()
        
        if(inputChar == ctrl_decreaseTempSetPoint)
        {
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
          if(tempSetPoint > tempMinimumAllowed)
          {
            tempSetPoint = tempSetPoint - 0.25;
@@ -272,12 +281,16 @@ void loop()
        
        if(inputChar == ctrl_logOff)
        {
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
          server.write("Goodbye!   ");
          client.stop();
+         validPassword = false;
+         break; //end the while loop
        }
        
        if(inputChar == ctrl_listCommands)
        {
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
          server.write("You can use these commands....");
          server.write(newLine);
          server.write(carriageReturn);
@@ -381,7 +394,8 @@ void loop()
   //relay them and store results in variables in the controller
     if(inputChar == grge_requestTempZone2)
     {
-       Serial.print(char(grge_requestTempZone2)); //relay the command to the serial port
+       commandSent = true; //set the commandSent variable true so it is't sent again this loop
+      Serial.print(char(grge_requestTempZone2)); //relay the command to the serial port
        garageTempOutdoor = floatFromSerial('!');
        server.write("Outdoor Temperature is: ");
        server.print(garageTempOutdoor);
@@ -392,6 +406,7 @@ void loop()
     
     if(inputChar == grge_requestTempZone1)
     {
+       commandSent = true; //set the commandSent variable true so it is't sent again this loop
        Serial.print(char(grge_requestTempZone1));
        garageTempAmbient = floatFromSerial('!'); 
        server.write("Garage Temperature is: ");
@@ -403,6 +418,7 @@ void loop()
     
     if(inputChar == grge_requestDoorStatus)
     {
+       commandSent = true; //set the commandSent variable true so it is't sent again this loop
        Serial.print(char(grge_requestDoorStatus));
        garageDoorStatus = boolFromSerial();
        server.write("Garage door is ");
@@ -416,6 +432,7 @@ void loop()
     
     if(inputChar == bsmt_requestTemp)
     {
+      commandSent = true; //set the commandSent variable true so it is't sent again this loop
       Serial.print(char(bsmt_requestTemp));
       basementTempAmbient = floatFromSerial('!');
       server.write("Basement Temperature is: ");
@@ -427,12 +444,15 @@ void loop()
     
   //ALL OTHER COMMANDS
   //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
-    if(inputChar > 47 && inputChar < 123)//ignore anything not alpha-numeric
+    if(inputChar > 47 && inputChar < 123 && !commandSent)//ignore anything not alpha-numeric
        {
          Serial.print(inputChar);
          server.write(newLine);
          server.write(carriageReturn);
        }
+  
+  //Reset the CommandSent tracking variable
+    commandSent = false;
   
        
      }
