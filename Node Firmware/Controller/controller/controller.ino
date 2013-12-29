@@ -33,12 +33,13 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.22 // FW version
+#define FWversion                  0.23 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
+#define clientTimeoutLimit        90000 //time limit in ms for user input before the session is terminated by the server
 //ASCII values
-#define newLine                   10 // ASCII NEW LINE
-#define carriageReturn            13 // ASCII Carriage return
+#define newLine                      10 // ASCII NEW LINE
+#define carriageReturn               13 // ASCII Carriage return
 #define tempOffset                -1.80 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
 
 
@@ -51,17 +52,11 @@
  or VPN must be setup on the router
  */
 
-byte mac[] = { 
-  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
-byte ip[] = { 
-  192, 168, 1, 230 };   // IP Address
-byte gateway[] = { 
-  10, 0, 0, 1 }; //Gateway (optional, not used)
-byte subnet[] = { 
-  255, 255, 0, 0 }; //Subnet
 
 EthernetServer server = EthernetServer(23); //Set up the ethernet server on port 23 (standard telnet port)
 
+  
+  
 /* 1-WIRE Configuration 
  A DS18B20 1-wire temperature sensor is connected on pin defined as OneWireBus1
  These commands setup the OneWire instance and pass the reference to the Dallas Temperature
@@ -84,11 +79,13 @@ float tempHysterisis = 0.25; //The values applied as +/- to the set point to avo
 bool maintainTemperature = false; //Furnace ON/Off commands are only sent if this is true
 bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
 bool validPassword = false; //This is true any time a valid user is logged in
-bool commandSent = false; //this tracks whether the controller has already relayed the commadn to the network, prevents sending it twice
+bool commandSent = false; //this tracks whether the controller has already relayed the command to the network, prevents sending it twice
+unsigned long timeOfLastInput = 0;//this is used to determine if the client interaction has timed out
+
 
 //Global variables from the basement node
 float basementTempAmbient= -127.0; //value used to store basement temperature as measured from the basement node
-
+bool basementFurnaceStatus = false;
 
 //Global variables from Garage Node
 float garageFirmware = -1; // track the garage node firmware version
@@ -110,6 +107,12 @@ bool garageRelay120V1 = 0; //track whether the 120V outlet is on, 1 = on, 0 = of
  */
 void setup()
 {
+
+  byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
+  byte ip[] = { 192, 168, 1, 230 };   // IP Address
+  byte gateway[] = { 10, 0, 0, 1 }; //Gateway (optional, not used)
+  byte subnet[] = { 255, 255, 0, 0 }; //Subnet
+
   // Initialize the counter for periodic sensor updates
   tempUpdateCountdown = tempUpdateDelay * loopsPerSecond;
 
@@ -152,6 +155,7 @@ void loop()
     while(client.available())
     {
       inputChar = client.read();// read in the data but don't do anything with it.
+      timeOfLastInput = millis();//set the time of last Input to NOW
     }
 
     // Prompt for password and compare to the actual value
@@ -166,6 +170,7 @@ void loop()
       if(client.available())
       {
         inputChar = client.read();
+        timeOfLastInput = millis();//set the time of last Input to NOW
         switch (inputChar){
         case '!': //reset password
           password.reset();
@@ -187,7 +192,9 @@ void loop()
             client.stop();
             password.reset();
             delay(30000); //Wait a short while before allowing any more connections
-          }
+            timeOfLastInput = millis();//set the time of last Input to NOW
+
+        }
           break;
         default: //append any ascii input characters that are not a '!' nor a '?' to the currently entered password.
           if(inputChar > 47 && inputChar < 123)
@@ -196,6 +203,25 @@ void loop()
           }
         }
       }
+
+      if(didClientTimeout())
+      {
+        server.print(F("Session Timeout - Disconnecting"));
+        server.write(newLine);
+        server.write(carriageReturn);
+        server.print(F("Time of last input: "));
+        server.print(timeOfLastInput);
+        server.write(newLine);
+        server.write(carriageReturn);
+        server.print(F("Now: "));
+        server.print(millis());
+        server.write(newLine);
+        server.write(carriageReturn); 
+        client.stop();
+        password.reset();
+        timeOfLastInput = millis();       
+      }
+
     }//End of while(!validPassword)
 
 
@@ -216,6 +242,7 @@ void loop()
       if(client.available()) //This is true if the telnet client has sent any data
       {
         inputChar = client.read(); //read in the client data
+        timeOfLastInput = millis();//set the time of last Input to NOW
 
 
         // COMMANDS HANDLED BY THIS NODE  
@@ -239,7 +266,7 @@ void loop()
         }
 
         if(inputChar == ctrl_enableFurnace)
-        
+
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           maintainTemperature = true;
@@ -257,8 +284,8 @@ void loop()
           maintainTemperature = false;
           furnaceStatus = false;
           Serial.print(bsmt_turnFurnaceOff); 
-          furnaceStatus = boolFromSerial();
-          if(!furnaceStatus)
+          basementFurnaceStatus = !boolFromSerial(); //The return is inverter because the basement node returns '1' as successfully disabled furnace
+          if(!basementFurnaceStatus)
           {
             server.print(F("Furnace disabled - not maintaining temperature"));
             server.write(newLine);//new line
@@ -267,7 +294,7 @@ void loop()
           else
           {
             server.print(F("No reply from basement node to furnace OFF command"));
-            server.write(newLine);//new line
+            server.write(newLine);//new line  
             server.write(carriageReturn);
           }
         }
@@ -322,6 +349,52 @@ void loop()
         if(inputChar == ctrl_listCommands)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          server.print(F("Controller FW Version: "));
+          server.print(FWversion);
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Memory Used: "));
+          server.print(2048 - freeRam());
+          server.print(F(" / 2048 Bytes"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Uptime: "));
+          if(millis() < 60000)
+          {
+             server.print(millis(), DEC);
+             server.print(F(" ms"));
+          }
+          else if(millis() < 120000)
+          {
+             server.print(millis()/60000);
+             server.print(F(" minute"));
+          } 
+          else if(millis() < 3600000)
+          {
+             server.print(millis()/60000);
+             server.print(F(" minutes"));
+          }
+          else if(millis() < 7200000)
+          {
+             server.print(millis()/3600000);
+             server.print(F(" hour"));
+          }
+          else if(millis() < 86400000)
+          {
+             server.print(millis()/3600000);
+             server.print(F(" hours"));
+          }
+          else
+          {
+             server.print(millis()/86400000);
+             server.print(F(" days"));
+          }                    
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.write(newLine);
+
+          
           server.print(F("You can use these commands...."));
           server.write(newLine);
           server.write(carriageReturn);
@@ -627,7 +700,7 @@ void loop()
 
 
 
-//BASEMENT NODE COMMANDS
+        //BASEMENT NODE COMMANDS
 
         if(inputChar == bsmt_requestTemp)
         {
@@ -668,6 +741,24 @@ void loop()
         tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
         controlFurnace();   
       }
+      if(didClientTimeout())
+      {
+        server.print(F("Session Timeout - Disconnecting"));
+        server.write(newLine);
+        server.write(carriageReturn);
+        server.print(F("Time of last input: "));
+        server.print(timeOfLastInput);
+        server.write(newLine);
+        server.write(carriageReturn);
+        server.print(F("Now: "));
+        server.print(millis());
+        server.write(newLine);
+        server.write(carriageReturn);        
+        client.stop();
+        password.reset();
+        timeOfLastInput = millis();               
+      }
+      
     }  //end of while(client.connected())
   }//end of if(client == true)
 
@@ -722,8 +813,8 @@ void controlFurnace()
     server.print(F("Sensor ERROR - Sent OFF command to basement node"));  
     server.write(carriageReturn);
     server.write(newLine);       
-    furnaceStatus = boolFromSerial();   
-    if(!furnaceStatus)
+    basementFurnaceStatus = boolFromSerial();   
+    if(!basementFurnaceStatus)
     {
       server.print(F("Furnace disabled - not maintaining temperature"));
       server.write(newLine);//new line
@@ -769,4 +860,26 @@ void controlFurnace()
 }
 
 
+/* This function returns true if the client has not made any input in the amount of time specified in the function call
+ */
+bool didClientTimeout()
+{
+  unsigned long now;
+  now = millis();
+  if((now - timeOfLastInput) > (90000))
+    return true;
+
+  else
+    return false;
+}
+
+/*
+freeRam() function returns the number of free bytes available in RAM from
+http://www.controllerprojects.com/2011/05/23/determining-sram-usage-on-arduino/
+*/
+int freeRam () {
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
 
