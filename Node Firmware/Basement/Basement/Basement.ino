@@ -24,7 +24,7 @@ Furnace and fan can both be controlled by remote command
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion             0.4
+  #define FWversion             0.5
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
   #define tempUpdateDelay        30 //how many seconds (approx) between updates of the temperature sensors
@@ -161,6 +161,7 @@ void commandReply()
       {
         Serial.print("Bv"); //send command reply prefix
         Serial.print(FWversion); //send command reply data
+        Serial.print("!");//send the terminator
         return; 
       }
 
