@@ -291,6 +291,7 @@ void commandReply()
       {
         Serial.print("Gv"); //send command reply prefix
         Serial.print(FWversion); //send command reply data
+        Serial.print("!");//Send the terminator
         return; 
       }
 
@@ -382,14 +383,14 @@ void commandReply()
 
   if(commandReq == grge_requestActivate120V1)
     {
-    Serial.print("G11"); // send the reply
+    Serial.print("Go1"); // send the reply
     digitalWrite(relay120V1, LOW);// turn on the 120V output (active LOW)
     return;
     }
 
   if(commandReq == grge_requestDeactivate120V1)
     {
-    Serial.print("G10"); // send the reply
+    Serial.print("Go0"); // send the reply
     digitalWrite(relay120V1, HIGH);//turn off the 120V output (active LOW)
     return;
     }
