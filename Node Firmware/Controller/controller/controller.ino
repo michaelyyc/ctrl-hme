@@ -33,7 +33,7 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.21 // FW version
+#define FWversion                  0.22 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
 //ASCII values
@@ -590,7 +590,7 @@ void loop()
         if(inputChar == grge_requestTempZone2)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(char(grge_requestTempZone2)); //relay the command to the serial port
+          Serial.print(grge_requestTempZone2); //relay the command to the serial port
           garageTempOutdoor = floatFromSerial('!');
           server.print(F("Outdoor Temperature is: "));
           server.print(garageTempOutdoor);
@@ -602,7 +602,7 @@ void loop()
         if(inputChar == grge_requestTempZone1)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(char(grge_requestTempZone1));
+          Serial.print(grge_requestTempZone1);
           garageTempAmbient = floatFromSerial('!'); 
           server.print(F("Garage Temperature is: "));
           server.print(garageTempAmbient);
@@ -614,7 +614,7 @@ void loop()
         if(inputChar == grge_requestDoorStatus)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(char(grge_requestDoorStatus));
+          Serial.print(grge_requestDoorStatus);
           garageDoorStatus = boolFromSerial();
           server.print(F("Garage door is "));
           if(garageDoorStatus)
@@ -632,7 +632,7 @@ void loop()
         if(inputChar == bsmt_requestTemp)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(char(bsmt_requestTemp));
+          Serial.print(bsmt_requestTemp);
           basementTempAmbient = floatFromSerial('!');
           server.print(F("Basement Temperature is: "));
           server.print(basementTempAmbient);
