@@ -17,7 +17,7 @@
  
  
  	Michael Bladon
- 	Dec 21, 2013
+ 	Dec 21, 2013 - Jan 12, 2014
  */
 
 #include <Password.h>
@@ -33,7 +33,7 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.23 // FW version
+#define FWversion                  0.24 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
 #define clientTimeoutLimit        90000 //time limit in ms for user input before the session is terminated by the server
@@ -128,9 +128,8 @@ void setup()
   // start listening for clients
   server.begin();
 
-  //get the initial temperature value
-  tempAmbient = readAmbientTemp();
-
+  //get the initial periodic update values
+  getPeriodicUpdates();
 }
 
 void loop()
@@ -209,14 +208,6 @@ void loop()
         server.print(F("Session Timeout - Disconnecting"));
         server.write(newLine);
         server.write(carriageReturn);
-        server.print(F("Time of last input: "));
-        server.print(timeOfLastInput);
-        server.write(newLine);
-        server.write(carriageReturn);
-        server.print(F("Now: "));
-        server.print(millis());
-        server.write(newLine);
-        server.write(carriageReturn); 
         client.stop();
         password.reset();
         timeOfLastInput = millis();       
@@ -228,9 +219,13 @@ void loop()
     //WELCOME MESSAGE - Displayed only at start of session
     if(validPassword)
     {
+      sendStatusToClient();          
       server.print(F("Welcome! Type '?' for a list of commands"));
       server.write(newLine);
       server.write(carriageReturn);
+
+      sendStatusReport();
+
     } 
 
     //Connected Loop - this is repeated as long as the client is connected
@@ -335,6 +330,13 @@ void loop()
           server.write(carriageReturn);
         }
 
+         if(inputChar == ctrl_statusReport)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          sendStatusReport();
+        }
+
+
         if(inputChar == ctrl_logOff)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -343,58 +345,12 @@ void loop()
           server.write(carriageReturn);
           client.stop();
           validPassword = false;
-          break; //end the while loop
+          break; //end the while loop to make the system request a password again.
         }
 
         if(inputChar == ctrl_listCommands)
         {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          server.print(F("Controller FW Version: "));
-          server.print(FWversion);
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("Memory Used: "));
-          server.print(2048 - freeRam());
-          server.print(F(" / 2048 Bytes"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("Uptime: "));
-          if(millis() < 60000)
-          {
-             server.print(millis(), DEC);
-             server.print(F(" ms"));
-          }
-          else if(millis() < 120000)
-          {
-             server.print(millis()/60000);
-             server.print(F(" minute"));
-          } 
-          else if(millis() < 3600000)
-          {
-             server.print(millis()/60000);
-             server.print(F(" minutes"));
-          }
-          else if(millis() < 7200000)
-          {
-             server.print(millis()/3600000);
-             server.print(F(" hour"));
-          }
-          else if(millis() < 86400000)
-          {
-             server.print(millis()/3600000);
-             server.print(F(" hours"));
-          }
-          else
-          {
-             server.print(millis()/86400000);
-             server.print(F(" days"));
-          }                    
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.write(newLine);
-
-          
+          sendStatusToClient();          
           server.print(F("You can use these commands...."));
           server.write(newLine);
           server.write(carriageReturn);
@@ -443,15 +399,6 @@ void loop()
           server.print(F("A : Request FW Version"));
           server.write(carriageReturn);
           server.write(newLine);
-          server.print(F("B : Request Furnace Status"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("C : Turn Furnace On"));
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("D : Turn Furnace Off"));   
-          server.write(newLine);
-          server.write(carriageReturn);
           server.print(F("E : Turn Fan On"));   
           server.write(newLine);
           server.write(carriageReturn);
@@ -519,25 +466,22 @@ void loop()
 
         if(inputChar == grge_requestActivateDoor)
         {
-          Serial.print(grge_requestActivateDoor);
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop          
-          garageLastDoorActivation = boolFromSerial();
-          if(garageLastDoorActivation)
-          {
-            server.print(F("Closing Garage Door"));
-            server.write(carriageReturn);
-            server.write(newLine); 
+            Serial.print(grge_requestActivateDoor);
+            commandSent = true; //set the commandSent variable true so it is't sent again this loop          
+            garageLastDoorActivation = boolFromSerial();
+            if(garageLastDoorActivation)
+            {
+              server.print(F("Closing Garage Door"));
+              server.write(carriageReturn);
+              server.write(newLine); 
+            }
+            else
+            {
+              server.print(F("Opening Garage Door"));
+              server.write(carriageReturn);
+              server.write(newLine); 
+            }
           }
-          else
-          {
-            server.print(F("Opening Garage Door"));
-            server.write(carriageReturn);
-            server.write(newLine); 
-          }
-
-        }
-
-
 
         if(inputChar == grge_requestActivate120V1)
         {
@@ -663,8 +607,6 @@ void loop()
         if(inputChar == grge_requestTempZone2)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(grge_requestTempZone2); //relay the command to the serial port
-          garageTempOutdoor = floatFromSerial('!');
           server.print(F("Outdoor Temperature is: "));
           server.print(garageTempOutdoor);
           server.print(F(" deg C"));
@@ -675,8 +617,6 @@ void loop()
         if(inputChar == grge_requestTempZone1)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(grge_requestTempZone1);
-          garageTempAmbient = floatFromSerial('!'); 
           server.print(F("Garage Temperature is: "));
           server.print(garageTempAmbient);
           server.print(F(" deg C"));
@@ -687,15 +627,7 @@ void loop()
         if(inputChar == grge_requestDoorStatus)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(grge_requestDoorStatus);
-          garageDoorStatus = boolFromSerial();
-          server.print(F("Garage door is "));
-          if(garageDoorStatus)
-            server.print(F("closed"));
-          else
-            server.print(F("open"));
-          server.write(newLine);
-          server.write(carriageReturn);
+          requestAndUpdateGarageDoorStatus();
         }
 
 
@@ -705,8 +637,6 @@ void loop()
         if(inputChar == bsmt_requestTemp)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(bsmt_requestTemp);
-          basementTempAmbient = floatFromSerial('!');
           server.print(F("Basement Temperature is: "));
           server.print(basementTempAmbient);
           server.print(F(" deg C"));
@@ -735,10 +665,10 @@ void loop()
         server.write(inputChar);//output the serial input to the telnet client
       }
       tempUpdateCountdown--; //decrement the periodic update timer
-      if(tempUpdateCountdown < 1) //Update the temp sensor and send furnace commands if needed
+      if(tempUpdateCountdown < 1) //Update the temp sensors and send furnace commands if needed
       {
-        tempAmbient = readAmbientTemp();
         tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
+        getPeriodicUpdates();//Update the temperature and other sensors
         controlFurnace();   
       }
       if(didClientTimeout())
@@ -768,9 +698,7 @@ void loop()
   tempUpdateCountdown--; //decrement the periodic update timer
   if(tempUpdateCountdown < 1)
   {
-    tempAmbient = readAmbientTemp();
-    tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
-    controlFurnace();
+    getPeriodicUpdates();
   }  
 
   //If there is no telnet client connected, just read and ignore the serial port
@@ -839,7 +767,7 @@ void controlFurnace()
       Serial.print(bsmt_turnFurnaceOff);     
       server.print(F("sent OFF command to basement node "));
       server.print(tempAmbient);
-      server.print(F(" deg C"));
+      server.print(F(" deg C "));
       server.write(carriageReturn);
       server.write(newLine);  
     }  
@@ -850,7 +778,7 @@ void controlFurnace()
       Serial.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
       server.print(F("sent ON command to basement node ")); 
       server.print(tempAmbient);
-      server.print(F(" deg C")); 
+      server.print(F(" deg C ")); 
       server.write(carriageReturn);
       server.write(newLine);            
     }
@@ -872,6 +800,138 @@ bool didClientTimeout()
   else
     return false;
 }
+
+void sendStatusToClient()
+{
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          server.print(F("Controller FW Version: "));
+          server.print(FWversion);
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Memory Used: "));
+          server.print(2048 - freeRam());
+          server.print(F(" / 2048 Bytes"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Uptime: "));
+          if(millis() < 60000)
+          {
+             server.print(millis(), DEC);
+             server.print(F(" ms"));
+          }
+          else if(millis() < 120000)
+          {
+             server.print(millis()/60000);
+             server.print(F(" minute"));
+          } 
+          else if(millis() < 3600000)
+          {
+             server.print(millis()/60000);
+             server.print(F(" minutes"));
+          }
+          else if(millis() < 7200000)
+          {
+             server.print(millis()/3600000);
+             server.print(F(" hour"));
+          }
+          else if(millis() < 86400000)
+          {
+             server.print(millis()/3600000);
+             server.print(F(" hours"));
+          }
+          else
+          {
+             server.print(millis()/86400000);
+             server.print(F(" days"));
+          }                    
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.write(newLine);
+}
+
+void sendStatusReport()
+{
+      server.print(F("Main Floor Temperature: "));
+      server.print(tempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+      
+      server.print(F("Basement Temperature:   "));
+      server.print(basementTempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Garage Temperature:     "));
+      server.print(garageTempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Outdoor Temperature:    "));
+      server.print(garageTempOutdoor);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+          
+     if(maintainTemperature)
+        {    
+          server.print(F("Maintaining "));
+          server.print(tempSetPoint);
+          server.print(F(" deg C on Main Floor"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+      else
+        {
+          server.print(F("Thermostat is off"));
+          server.write(newLine);
+          server.write(carriageReturn);     
+        }
+        requestAndUpdateGarageDoorStatus();
+}
+
+void requestAndUpdateGarageDoorStatus()
+{
+          Serial.print(grge_requestDoorStatus);
+          garageDoorStatus = boolFromSerial();
+          server.print(F("Garage door is "));
+          if(garageDoorStatus)
+            server.print(F("CLOSED"));
+          else
+            server.print(F("OPEN"));
+          server.write(newLine);
+          server.write(carriageReturn);
+}
+
+void getPeriodicUpdates()
+{
+
+
+  tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
+    
+    //Get a reading from the controller's built in 1-wire temperature sensor
+    tempAmbient = readAmbientTemp();
+    
+    //Send any commands to furnace if necessary
+    controlFurnace();
+    
+    //Get updates from the basement node
+    Serial.print(bsmt_requestTemp);
+    basementTempAmbient = floatFromSerial('!');    
+    
+    //Get updates from the garage node
+    Serial.print(grge_requestTempZone2); //relay the command to the serial port
+    garageTempOutdoor = floatFromSerial('!');  
+    Serial.print(grge_requestTempZone1);
+    garageTempAmbient = floatFromSerial('!'); 
+
+
+}
+
 
 /*
 freeRam() function returns the number of free bytes available in RAM from
