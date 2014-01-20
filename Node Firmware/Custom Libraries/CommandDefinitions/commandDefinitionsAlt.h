@@ -7,6 +7,7 @@
   #define ctrl_decreaseTempSetPoint      'P' //P
   #define ctrl_listCommands              '?' // ?
   #define ctrl_logOff                    'x' // x
+  #define ctrl_statusReport				 'S' //S
 
 //BASEMENT COMMANDS
 //Commands from the controller
@@ -40,3 +41,15 @@
   #define grge_requestClearErrorFlag   'b' //b
   #define grge_requestPowerSupplyV     'c' //c
   
+  
+  //BEDROOM COMMANDS
+  //Commands from the controller
+  //Alternat commands for 0-9, a-Z for ASCII input from keypard
+  
+  #define bdrm_requestFWVer				'i'
+  #define bdrm_requestTemp				'j'
+  #define bdrm_increaseSetPoint			'k'
+  #define bdrm_decreaseSetPoint			'l'
+  #define bdrm_maintainSetPoint 		'm'
+  #define bdrm_dontMaintainSetPoint		'n'
+  #define bdrm_requestSetPoint			'o'
