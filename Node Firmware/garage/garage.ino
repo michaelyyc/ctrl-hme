@@ -24,7 +24,7 @@ The temperature sensors are DS18B20
   //Constants
   #define activationTime         15
   #define timeLimit             300
-  #define FWversion             0.4
+  #define FWversion             0.41
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
@@ -383,14 +383,14 @@ void commandReply()
 
   if(commandReq == grge_requestActivate120V1)
     {
-    Serial.print("Go1"); // send the reply
+    Serial.print("GO1"); // send the reply
     digitalWrite(relay120V1, LOW);// turn on the 120V output (active LOW)
     return;
     }
 
   if(commandReq == grge_requestDeactivate120V1)
     {
-    Serial.print("Go0"); // send the reply
+    Serial.print("Go1"); // send the reply
     digitalWrite(relay120V1, HIGH);//turn off the 120V output (active LOW)
     return;
     }

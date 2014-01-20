@@ -33,14 +33,14 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.24 // FW version
+#define FWversion                  0.29 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
-#define clientTimeoutLimit        90000 //time limit in ms for user input before the session is terminated by the server
+#define clientTimeoutLimit       120000 //time limit in ms for user input before the session is terminated by the server
 //ASCII values
 #define newLine                      10 // ASCII NEW LINE
 #define carriageReturn               13 // ASCII Carriage return
-#define tempOffset                -1.80 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
+#define tempOffset                -0.80 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
 
 
 /* NETWORK CONFIGURATION
@@ -85,7 +85,6 @@ unsigned long timeOfLastInput = 0;//this is used to determine if the client inte
 
 //Global variables from the basement node
 float basementTempAmbient= -127.0; //value used to store basement temperature as measured from the basement node
-bool basementFurnaceStatus = false;
 
 //Global variables from Garage Node
 float garageFirmware = -1; // track the garage node firmware version
@@ -97,9 +96,11 @@ bool garageLastDoorActivation = false; //keep track of whether the last door act
 bool garageAutoCloseStatus = false; // track whether auto close is enabled or not
 bool garageRelay120V1 = 0; //track whether the 120V outlet is on, 1 = on, 0 = off
 
-
-
-
+//Global variables from the bedroom node
+float bedroomFirmware = -1;
+float bedroomTemperature = -127.0;
+float bedroomTemperatureSetPoint = -127.0;
+bool bedroomMaintainTemp = false;
 
 /* SETUP - RUN ONCE
  	Setup function initializes some variables and sets up the serial and ethernet ports
@@ -219,13 +220,9 @@ void loop()
     //WELCOME MESSAGE - Displayed only at start of session
     if(validPassword)
     {
-      sendStatusToClient();          
       server.print(F("Welcome! Type '?' for a list of commands"));
       server.write(newLine);
       server.write(carriageReturn);
-
-      sendStatusReport();
-
     } 
 
     //Connected Loop - this is repeated as long as the client is connected
@@ -279,19 +276,6 @@ void loop()
           maintainTemperature = false;
           furnaceStatus = false;
           Serial.print(bsmt_turnFurnaceOff); 
-          basementFurnaceStatus = !boolFromSerial(); //The return is inverter because the basement node returns '1' as successfully disabled furnace
-          if(!basementFurnaceStatus)
-          {
-            server.print(F("Furnace disabled - not maintaining temperature"));
-            server.write(newLine);//new line
-            server.write(carriageReturn);
-          }
-          else
-          {
-            server.print(F("No reply from basement node to furnace OFF command"));
-            server.write(newLine);//new line  
-            server.write(carriageReturn);
-          }
         }
 
         if(inputChar == ctrl_increaseTempSetPoint)
@@ -350,21 +334,21 @@ void loop()
 
         if(inputChar == ctrl_listCommands)
         {
-          sendStatusToClient();          
+          commandSent = true;
           server.print(F("You can use these commands...."));
           server.write(newLine);
           server.write(carriageReturn);
+          
+          server.print(F("S : Status Report"));
+          server.write(newLine);
+          server.write(carriageReturn);
+          
+          
           server.write(newLine);
           server.print(F("GARAGE:"));
           server.write(newLine);
           server.write(carriageReturn);
           server.print(F("0 : Request FW Version"));
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("1 : Request Door Status"));
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("2 : Request Inside Temperature"));
           server.write(newLine);
           server.write(carriageReturn);
           server.print(F("3 : Activate Door"));   
@@ -385,12 +369,7 @@ void loop()
           server.print(F("8 : Turn off Block Heater"));  
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("a : Request outside temperature"));  
 
-
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.write(newLine);
           server.write(carriageReturn);
           server.write(newLine);
           server.print(F("BASEMENT:"));   
@@ -405,12 +384,7 @@ void loop()
           server.print(F("F : Turn Fan and Furnace Off"));  
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("G : Request Temperature"));  
-          server.write(newLine);
-          server.write(carriageReturn);
 
-          server.write(newLine);
-          server.write(carriageReturn);
           server.write(newLine);
           server.print(F("MAIN FLOOR:"));   
           server.write(carriageReturn);
@@ -431,6 +405,35 @@ void loop()
           server.write(carriageReturn);
           server.write(newLine);
           server.print(F("P : Decrease Set Temperature"));         
+          server.write(carriageReturn);
+          server.write(newLine);    
+          server.write(carriageReturn);
+          server.write(newLine);   
+
+          
+          server.write(newLine);
+          server.print(F("BEDROOM:"));   
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("i : Request FW Version"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("j : Request Temperature"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("k : Increase Set Temperature"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("l : Decrease Set Temperature"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("m : Maintain Temperature")); 
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("n : Do Not Maintain Temperature"));  
+           server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("o : Request Set Temperature"));           
           server.write(carriageReturn);
           server.write(newLine);    
           server.write(carriageReturn);
@@ -505,9 +508,9 @@ void loop()
 
         if(inputChar == grge_requestDeactivate120V1)
         {
-          Serial.print(grge_requestActivate120V1);
+          Serial.print(grge_requestDeactivate120V1);
           commandSent = true; //set the commandSent variable true so it is't sent again this loop          
-          garageRelay120V1 = boolFromSerial();
+          garageRelay120V1 = !boolFromSerial();
           if(garageRelay120V1)
           {
             server.print(F("ERROR: 120V outlet is now ON"));
@@ -644,6 +647,109 @@ void loop()
           server.write(carriageReturn);
         }
 
+
+
+        //BEDROOM NODE COMMANDS
+         if(inputChar == bdrm_requestFWVer)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_requestFWVer);
+          bedroomFirmware = floatFromSerial('!');
+          server.print(F("Bedroom node FW Version: "));
+          server.print(bedroomFirmware);
+          server.write(newLine);
+          server.write(carriageReturn);
+        }       
+
+
+         if(inputChar == bdrm_requestTemp)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_requestTemp);
+          bedroomTemperature = floatFromSerial('!');
+          server.print(F("Bedroom Temperature: "));
+          server.print(bedroomTemperature);
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+        if(inputChar == bdrm_increaseSetPoint)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_increaseSetPoint);
+          bedroomTemperatureSetPoint = floatFromSerial('!');
+          server.print(F("Bedroom Set Point Increased to: "));
+          server.print(bedroomTemperatureSetPoint);
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+        if(inputChar == bdrm_decreaseSetPoint)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_increaseSetPoint);
+          bedroomTemperatureSetPoint = floatFromSerial('!');
+          server.print(F("Bedroom Set Point Decreased to: "));
+          server.print(bedroomTemperatureSetPoint);
+          server.write(newLine);
+          server.write(carriageReturn);
+        }   
+                
+        if(inputChar == bdrm_requestSetPoint)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_requestSetPoint);
+          bedroomTemperatureSetPoint = floatFromSerial('!');
+          server.print(F("Bedroom Set Point: "));
+          server.print(bedroomTemperatureSetPoint);
+          server.write(newLine);
+          server.write(carriageReturn);
+        }   
+        
+        if(inputChar == bdrm_maintainSetPoint)
+        {
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_maintainSetPoint);
+          bedroomMaintainTemp = boolFromSerial();
+          if(bedroomMaintainTemp)
+          {
+            server.print(F("Maintaining Bedroom Set Point: "));
+            server.print(bedroomTemperatureSetPoint);
+            server.write(newLine);
+            server.write(carriageReturn);
+          }
+          else
+          {
+            server.print(F("Error - Command not acknowledged by bedroom node"));
+            server.write(newLine);
+            server.write(carriageReturn);
+          }
+          
+        }
+        
+        if(inputChar == bdrm_dontMaintainSetPoint)
+        {
+          commandSent = false; //set the commandSent variable true so it is't sent again this loop
+          Serial.print(bdrm_dontMaintainSetPoint);
+          bedroomMaintainTemp = !boolFromSerial();
+          if(!bedroomMaintainTemp)
+          {
+            server.print(F("Bedroom Heater Disabled"));
+            server.write(newLine);
+            server.write(carriageReturn);
+          }
+          else
+          {
+            server.print(F("Error - Command not acknowledged by bedroom node"));
+            server.write(newLine);
+            server.write(carriageReturn);
+          }
+          
+        }     
+                
+    
+        
+
         //ALL OTHER COMMANDS
         //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
         if(inputChar > 47 && inputChar < 123 && !commandSent)//ignore anything not alpha-numeric
@@ -653,6 +759,9 @@ void loop()
           server.write(newLine);
           server.write(carriageReturn);
         }
+
+
+
 
         //Reset the CommandSent tracking variable
         commandSent = false;
@@ -741,21 +850,9 @@ void controlFurnace()
     server.print(F("Sensor ERROR - Sent OFF command to basement node"));  
     server.write(carriageReturn);
     server.write(newLine);       
-    basementFurnaceStatus = boolFromSerial();   
-    if(!basementFurnaceStatus)
-    {
       server.print(F("Furnace disabled - not maintaining temperature"));
       server.write(newLine);//new line
       server.write(carriageReturn);
-    }
-    else
-    {
-      server.print(F("Error - No reply from basement node to furnace OFF command"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
-    }
-
-
   }
 
   if(maintainTemperature && tempAmbient != (- 127.0 + tempOffset) && tempAmbient != (0.0 + tempOffset))//only act when good sensor data is present and maintainTemperature is enabled
@@ -776,15 +873,19 @@ void controlFurnace()
     {
       furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
       Serial.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
-      server.print(F("sent ON command to basement node ")); 
-      server.print(tempAmbient);
-      server.print(F(" deg C ")); 
-      server.write(carriageReturn);
-      server.write(newLine);            
-    }
+//     server.print(F("sent ON command to basement node ")); 
+//      server.print(tempAmbient);
+//      server.print(F(" deg C ")); 
+      if(!boolFromSerial())
+      {
+        server.print(F("ERROR: Basement node didn't acknowledge furnace on command"));
+        server.write(carriageReturn);
+        server.write(newLine);        
+      }
 
   }
   return;
+}
 }
 
 
@@ -801,9 +902,73 @@ bool didClientTimeout()
     return false;
 }
 
-void sendStatusToClient()
+
+void sendStatusReport()
 {
-         commandSent = true; //set the commandSent variable true so it is't sent again this loop
+      server.print(F("Main Floor Temperature: "));
+      server.print(tempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+
+      server.print(F("Bedroom Temperature:    "));
+      server.print(bedroomTemperature);
+      server.print(F(" deg C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+      
+      server.print(F("Basement Temperature:   "));
+      server.print(basementTempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Garage Temperature:     "));
+      server.print(garageTempAmbient);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Outdoor Temperature:    "));  
+      server.print(garageTempOutdoor);
+      server.print(F(" deg C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+          
+     if(maintainTemperature)
+        {    
+          server.print(F("Thermostat ON - Set:    "));
+          server.print(tempSetPoint);
+          server.print(F(" deg C on Main Floor"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+      else
+        {
+          server.print(F("Thermostat OFF - Set:   "));
+          server.print(tempSetPoint);
+          server.print(F(" Deg C on Main Floor"));
+          server.write(newLine);
+          server.write(carriageReturn);     
+        }
+        
+        if(furnaceStatus)
+        {
+          server.print(F("Furnace is currently on"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        else
+        {
+          server.print(F("Furnace is currently off"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        requestAndUpdateGarageDoorStatus();
+        server.write(newLine);
+        server.write(carriageReturn);          
+        
           server.print(F("Controller FW Version: "));
           server.print(FWversion);
           server.write(carriageReturn);
@@ -847,51 +1012,8 @@ void sendStatusToClient()
           server.write(carriageReturn);
           server.write(newLine);
           server.write(carriageReturn);
-          server.write(newLine);
-}
-
-void sendStatusReport()
-{
-      server.print(F("Main Floor Temperature: "));
-      server.print(tempAmbient);
-      server.print(F(" deg C"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
-      
-      server.print(F("Basement Temperature:   "));
-      server.print(basementTempAmbient);
-      server.print(F(" deg C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-
-      server.print(F("Garage Temperature:     "));
-      server.print(garageTempAmbient);
-      server.print(F(" deg C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-
-      server.print(F("Outdoor Temperature:    "));
-      server.print(garageTempOutdoor);
-      server.print(F(" deg C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-          
-     if(maintainTemperature)
-        {    
-          server.print(F("Maintaining "));
-          server.print(tempSetPoint);
-          server.print(F(" deg C on Main Floor"));
-          server.write(newLine);
-          server.write(carriageReturn);
-        }
+          server.write(newLine);        
         
-      else
-        {
-          server.print(F("Thermostat is off"));
-          server.write(newLine);
-          server.write(carriageReturn);     
-        }
-        requestAndUpdateGarageDoorStatus();
 }
 
 void requestAndUpdateGarageDoorStatus()
@@ -916,12 +1038,6 @@ void getPeriodicUpdates()
     //Get a reading from the controller's built in 1-wire temperature sensor
     tempAmbient = readAmbientTemp();
     
-    //Send any commands to furnace if necessary
-    controlFurnace();
-    
-    //Get updates from the basement node
-    Serial.print(bsmt_requestTemp);
-    basementTempAmbient = floatFromSerial('!');    
     
     //Get updates from the garage node
     Serial.print(grge_requestTempZone2); //relay the command to the serial port
@@ -929,7 +1045,14 @@ void getPeriodicUpdates()
     Serial.print(grge_requestTempZone1);
     garageTempAmbient = floatFromSerial('!'); 
 
-
+    //Get updates from the basement node
+    Serial.print(bsmt_requestTemp);
+    basementTempAmbient = floatFromSerial('!');    
+    
+    //Get updates from the bedroom node
+    Serial.print(bdrm_requestTemp);
+    bedroomTemperature = floatFromSerial('!');
+    
 }
 
 
