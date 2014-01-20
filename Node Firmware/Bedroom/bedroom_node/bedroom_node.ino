@@ -13,7 +13,7 @@
 #define FWVersion                 0.01
 #define setPointMinimum           15.0
 #define setPointMaximum           21.0
-#define tempUpdateLoopInitial     450000
+#define tempUpdateLoopInitial     500000
 
 
 //Variables
@@ -23,7 +23,7 @@ float ambientTemp = -1;
 bool maintainSetPoint = false;
 bool heaterOn = false;
 int  input = 0;
-int tempUpdateLoop = tempUpdateLoopInitial;
+double tempUpdateLoop = tempUpdateLoopInitial;
 char inputChar;
 unsigned int tempUpdateCountdown = 0;
 
@@ -56,10 +56,11 @@ void loop() {
     //Periodically update the reading from the temperature sensor
     if(tempUpdateLoop < 1)
     {
+      digitalWrite(13, HIGH);
       sensors1.requestTemperatures(); 
       ambientTemp = sensors1.getTempCByIndex(0);
       tempUpdateLoop = tempUpdateLoopInitial;
-      
+      digitalWrite(13, LOW);
     }
     tempUpdateLoop--;
     
@@ -85,7 +86,7 @@ void loop() {
       if(inputChar == bdrm_requestFWVer)
       {
         Serial.print("Mv");
-        Serial.println(FWVersion);
+        Serial.print(FWVersion);
         Serial.print("!");
   
       }

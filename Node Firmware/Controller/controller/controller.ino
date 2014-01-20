@@ -33,7 +33,7 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.29 // FW version
+#define FWversion                  0.30 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
 #define clientTimeoutLimit       120000 //time limit in ms for user input before the session is terminated by the server
@@ -276,6 +276,11 @@ void loop()
           maintainTemperature = false;
           furnaceStatus = false;
           Serial.print(bsmt_turnFurnaceOff); 
+          if(!boolFromSerial())
+          {
+                      server.print(F("Error - No reply from basement node"));
+          }
+            
         }
 
         if(inputChar == ctrl_increaseTempSetPoint)
@@ -687,7 +692,7 @@ void loop()
         if(inputChar == bdrm_decreaseSetPoint)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial.print(bdrm_increaseSetPoint);
+          Serial.print(bdrm_decreaseSetPoint);
           bedroomTemperatureSetPoint = floatFromSerial('!');
           server.print(F("Bedroom Set Point Decreased to: "));
           server.print(bedroomTemperatureSetPoint);
@@ -729,7 +734,7 @@ void loop()
         
         if(inputChar == bdrm_dontMaintainSetPoint)
         {
-          commandSent = false; //set the commandSent variable true so it is't sent again this loop
+          commandSent = true; //set the commandSent variable true so it is't sent again this loop
           Serial.print(bdrm_dontMaintainSetPoint);
           bedroomMaintainTemp = !boolFromSerial();
           if(!bedroomMaintainTemp)
@@ -905,39 +910,58 @@ bool didClientTimeout()
 
 void sendStatusReport()
 {
-      server.print(F("Main Floor Temperature: "));
+      server.print(F("Main Floor Temperature:     "));
       server.print(tempAmbient);
       server.print(F(" deg C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-      server.print(F("Bedroom Temperature:    "));
+      server.print(F("Bedroom Temperature:        "));
       server.print(bedroomTemperature);
       server.print(F(" deg C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
       
-      server.print(F("Basement Temperature:   "));
+      server.print(F("Basement Temperature:       "));
       server.print(basementTempAmbient);
       server.print(F(" deg C"));
       server.write(newLine);
       server.write(carriageReturn);
 
-      server.print(F("Garage Temperature:     "));
+      server.print(F("Garage Temperature:         "));
       server.print(garageTempAmbient);
       server.print(F(" deg C"));
       server.write(newLine);
       server.write(carriageReturn);
 
-      server.print(F("Outdoor Temperature:    "));  
+      server.print(F("Outdoor Temperature:        "));  
       server.print(garageTempOutdoor);
       server.print(F(" deg C"));
       server.write(newLine);
       server.write(carriageReturn);
           
+     if(bedroomMaintainTemp)
+        {    
+          server.print(F("Bedroom Thermostat ON - Set:"));
+          server.print(bedroomTemperatureSetPoint);
+          server.print(F(" deg C in Bedroom"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+      else
+        {
+          server.print(F("Bedroom Thermostat OFF Set: "));
+          server.print(bedroomTemperatureSetPoint);
+          server.print(F(" Deg C in Bedroom"));
+          server.write(newLine);
+          server.write(carriageReturn);     
+        }
+        
+          
      if(maintainTemperature)
         {    
-          server.print(F("Thermostat ON - Set:    "));
+          server.print(F("Main Thermostat ON - Set:   "));
           server.print(tempSetPoint);
           server.print(F(" deg C on Main Floor"));
           server.write(newLine);
@@ -946,12 +970,13 @@ void sendStatusReport()
         
       else
         {
-          server.print(F("Thermostat OFF - Set:   "));
+          server.print(F("Main Thermostat OFF Set:    "));
           server.print(tempSetPoint);
           server.print(F(" Deg C on Main Floor"));
           server.write(newLine);
           server.write(carriageReturn);     
         }
+        
         
         if(furnaceStatus)
         {
