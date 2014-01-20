@@ -33,7 +33,7 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.30 // FW version
+#define FWversion                  0.31 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
 #define clientTimeoutLimit       120000 //time limit in ms for user input before the session is terminated by the server
@@ -262,7 +262,6 @@ void loop()
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           maintainTemperature = true;
-          furnaceStatus = false; //set this false to require a new temperature comparison before sending first ON command to furnace
           server.print(F("Furnace enabled, maintain "));
           server.print(tempSetPoint);
           server.print(F(" deg C at upstairs sensor"));
@@ -759,8 +758,7 @@ void loop()
         //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
         if(inputChar > 47 && inputChar < 123 && !commandSent)//ignore anything not alpha-numeric
         {
-          Serial.print(inputChar);
-          server.print(F("Unknown command - sending to all nodes"));
+          server.print(F("Unknown command"));
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -783,7 +781,8 @@ void loop()
       {
         tempUpdateCountdown = tempUpdateDelay * loopsPerSecond; //reset the countdown
         getPeriodicUpdates();//Update the temperature and other sensors
-        controlFurnace();   
+        if(maintainTemperature)
+          controlFurnace();   
       }
       if(didClientTimeout())
       {
@@ -813,6 +812,8 @@ void loop()
   if(tempUpdateCountdown < 1)
   {
     getPeriodicUpdates();
+    if(maintainTemperature)
+      controlFurnace();
   }  
 
   //If there is no telnet client connected, just read and ignore the serial port
@@ -849,48 +850,48 @@ void controlFurnace()
 {
   //Control furnace by sending commands to the basement node based on tempAmbient
 
-  if(tempAmbient == (-127.0 + tempOffset) || tempAmbient == (0.0 + tempOffset)) //sensor error, disable furnace
+  if(tempAmbient == (-127.0 + tempOffset) || tempAmbient == (0.0 + tempOffset))
   {
-    Serial.print(bsmt_turnFurnaceOff);  
-    server.print(F("Sensor ERROR - Sent OFF command to basement node"));  
-    server.write(carriageReturn);
-    server.write(newLine);       
-      server.print(F("Furnace disabled - not maintaining temperature"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
+      return;//Don't act on bad values - do nothing
   }
-
-  if(maintainTemperature && tempAmbient != (- 127.0 + tempOffset) && tempAmbient != (0.0 + tempOffset))//only act when good sensor data is present and maintainTemperature is enabled
-  {       
-    //turn the furnace off if necessary 
-    if(tempAmbient > (tempSetPoint + tempHysterisis))
-    {
-      furnaceStatus = false;//prevent furnace from turning on in the next loop
-      Serial.print(bsmt_turnFurnaceOff);     
-      server.print(F("sent OFF command to basement node "));
-      server.print(tempAmbient);
-      server.print(F(" deg C "));
-      server.write(carriageReturn);
-      server.write(newLine);  
-    }  
-    // turn the furnace on if necessary
-    if(furnaceStatus || (tempAmbient < (tempSetPoint - tempHysterisis)))
-    {
-      furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
-      Serial.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
-//     server.print(F("sent ON command to basement node ")); 
-//      server.print(tempAmbient);
-//      server.print(F(" deg C ")); 
-      if(!boolFromSerial())
+      //turn the furnace off if necessary 
+      if(tempAmbient > (tempSetPoint + tempHysterisis))
       {
-        server.print(F("ERROR: Basement node didn't acknowledge furnace on command"));
-        server.write(carriageReturn);
-        server.write(newLine);        
-      }
-
-  }
-  return;
-}
+        furnaceStatus = false;//prevent furnace from turning on in the next loop
+        Serial.print(bsmt_turnFurnaceOff);   
+        if(!boolFromSerial())
+        {
+ //         server.print(F("ERROR: Basement node didn't acknowledge furnace off command"));
+ //         server.write(carriageReturn);
+ //         server.write(newLine);        
+        }        
+      }  
+      
+      
+      // turn the furnace on if necessary
+      if(furnaceStatus || (tempAmbient < (tempSetPoint - tempHysterisis)))
+      {
+        furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
+        Serial.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
+//        server.print(F("sent ON command to basement node ")); 
+//        server.print(tempAmbient);
+//        server.print(F(" deg C ")); 
+        if(boolFromSerial())
+          {
+//            server.print(F("ACK"));
+//            server.write(carriageReturn);
+//            server.write(newLine);        
+          }
+   
+        else
+          {
+ //           server.print(F("ERROR: Basement node didn't acknowledge furnace on command"));
+ //           server.write(carriageReturn);
+ //           server.write(newLine);        
+          }
+        }
+    return;
+  
 }
 
 
@@ -990,6 +991,23 @@ void sendStatusReport()
           server.write(newLine);
           server.write(carriageReturn);
         }
+        
+        if(bedroomMaintainTemp && (bedroomTemperature < (bedroomTemperatureSetPoint - 0.25)))
+        {
+          server.print(F("Bedroom Heater is on"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+        else
+        {
+          server.print(F("Bedroom heater is off"));
+          server.write(newLine);
+          server.write(carriageReturn);
+        }
+        
+        
+        
         requestAndUpdateGarageDoorStatus();
         server.write(newLine);
         server.write(carriageReturn);          
@@ -1069,7 +1087,7 @@ void getPeriodicUpdates()
     garageTempOutdoor = floatFromSerial('!');  
     Serial.print(grge_requestTempZone1);
     garageTempAmbient = floatFromSerial('!'); 
-
+?
     //Get updates from the basement node
     Serial.print(bsmt_requestTemp);
     basementTempAmbient = floatFromSerial('!');    
@@ -1077,6 +1095,9 @@ void getPeriodicUpdates()
     //Get updates from the bedroom node
     Serial.print(bdrm_requestTemp);
     bedroomTemperature = floatFromSerial('!');
+    Serial.print(bdrm_requestSetPoint);
+    bedroomTemperatureSetPoint = floatFromSerial('!');
+
     
 }
 
