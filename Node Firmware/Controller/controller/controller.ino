@@ -36,15 +36,15 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.32 // FW version
+#define FWversion                  0.33 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         17.0 //minimum temperature
-#define clientTimeoutLimit       120000 //time limit in ms for user input before the session is terminated by the server
 #define blockHeaterOnHour             5 //hour in the morning to automatically turn on block heater
 #define blockHeaterOffHour           12 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -5 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors
+#define clientTimeoutLimit        90000 //number of seconds before assuming the client has disconnected
 
 //ASCII values
 #define newLine                      10 // ASCII NEW LINE
@@ -243,9 +243,20 @@ void loop()
         server.print(F("Session Timeout - Disconnecting"));
         server.write(newLine);
         server.write(carriageReturn);
+        
+        
+        server.print(F("Time of last input: "));
+        server.print(timeOfLastInput);
+        server.write(newLine);
+        server.write(carriageReturn);
+        server.print(F("Now: "));
+        server.print(millis());
+        server.write(newLine);
+        server.write(carriageReturn);   
+        
         client.stop();
         password.reset();
-        timeOfLastInput = millis();       
+        timeOfLastInput = millis();    
       }
 
     }//End of while(!validPassword)
@@ -358,7 +369,7 @@ void loop()
           blockHeaterEnabled = true;
           server.print(F("Block Heater will turn on after "));
           server.print(blockHeaterOnHour);          
-          server.print(F(":00h if Temperature is below ")); 
+          server.print(F(":00 AM if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
           server.print(F(" deg C"));         
           server.write(newLine);//new line
@@ -439,6 +450,8 @@ void loop()
               server.print(F("Opening Garage Door"));
               server.write(carriageReturn);
               server.write(newLine); 
+              garageDoorStatus = false;
+              digitalWrite(garageDoorStatusPin, garageDoorStatus);
             }
           }
 
@@ -728,17 +741,12 @@ void loop()
         inputChar = Serial.read();//read the serial input
         server.write(inputChar);//output the serial input to the telnet client
       }
-      now = rtc.now();//get time from teh RTC
+      now = rtc.now();//get time from the RTC
       if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelay) //Update the temp sensors and send furnace commands if needed
       {
         getPeriodicUpdates();//Update the temperature and other sensors
         //saveToSDCard();
-        if(maintainTemperature)
-          controlFurnace();
        
-        if(blockHeaterEnabled)
-          controlBlockHeater();
-        
      
       }
       if(didClientTimeout())
@@ -746,6 +754,8 @@ void loop()
         server.print(F("Session Timeout - Disconnecting"));
         server.write(newLine);
         server.write(carriageReturn);
+        
+        
         server.print(F("Time of last input: "));
         server.print(timeOfLastInput);
         server.write(newLine);
@@ -753,10 +763,12 @@ void loop()
         server.print(F("Now: "));
         server.print(millis());
         server.write(newLine);
-        server.write(carriageReturn);        
+        server.write(carriageReturn);   
+        
         client.stop();
         password.reset();
-        timeOfLastInput = millis();               
+        timeOfLastInput = millis();      
+        
       }
       
     }  //end of while(client.connected())
@@ -765,15 +777,12 @@ void loop()
 
 
   //See if it's time to update the periodic sensors
+      now = rtc.now();//update the time from the RTC
       if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelay) //Update the temp sensors and send furnace commands if needed
       {
         getPeriodicUpdates();//Update the temperature and other sensors
         //saveToSDCard();
-        if(maintainTemperature)
-          controlFurnace();
-       
-        if(blockHeaterEnabled)
-          controlBlockHeater();
+
         
      
       }
@@ -800,6 +809,16 @@ float readAmbientTemp()
   sensors1.requestTemperatures();
   temp = sensors1.getTempCByIndex(0) + tempOffset;   
   return temp;
+}
+
+void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off if called between 7:00 and 7:05AM.
+{
+    now = rtc.now();
+    if(now.hour() == 7 && now.minute() <= 5)
+    {
+      Serial.print(bdrm_dontMaintainSetPoint);
+      bedroomMaintainTemp = !boolFromSerial();
+    }
 }
 
 /* controlFurnace()
@@ -885,7 +904,7 @@ bool didClientTimeout()
 {
   unsigned long temp;
   temp = millis();
-  if((temp - timeOfLastInput) > (90000))
+  if((temp - timeOfLastInput) > clientTimeoutLimit)
     return true;
 
   else
@@ -1075,10 +1094,30 @@ void sendStatusReport()
         }
 
         server.print(F(" Deg C on Main Floor"));
+        server.write(newLine);//new line
+        server.write(carriageReturn); 
+        
+        if(blockHeaterEnabled)
+        {
+          server.print(F("Block Heater will turn on after "));
+          server.print(blockHeaterOnHour);          
+          server.print(F(":00 AM if Temperature is below ")); 
+          server.print(blockHeaterMaxTemp);
+          server.print(F(" deg C"));         
+          server.write(newLine);//new line
+          server.write(carriageReturn);     
+        }
+        
+        else
+        {
+         server.print(F("Block heater will not turn on automatically")); 
+         server.write(newLine);//new line
+         server.write(carriageReturn);     
+        }
+        
         server.write(newLine);
         server.write(carriageReturn);   
-        server.write(newLine);
-        server.write(carriageReturn);  
+  
 
         
         server.print(F("Furnace is currently "));
@@ -1183,8 +1222,9 @@ void sendUptime()
 {
   now = rtc.now();
   DateTime uptime = now.unixtime() - startup.unixtime();
+
   long uptimeSeconds = uptime.unixtime();
-           if(uptimeSeconds < 60)
+          if(uptimeSeconds < 60)
           {
              server.print(uptimeSeconds);
              server.print(F(" seconds"));
@@ -1216,8 +1256,7 @@ void sendUptime()
           }                    
           server.write(carriageReturn);
           server.write(newLine);
-          
-  
+
 }
 
 void requestAndUpdateGarageDoorStatus()
@@ -1237,9 +1276,6 @@ void requestAndUpdateGarageDoorStatus()
 
 void getPeriodicUpdates()
 {
-
-
-    
     //Get a reading from the controller's built in 1-wire temperature sensor
     tempAmbient = readAmbientTemp();
     
@@ -1263,8 +1299,16 @@ void getPeriodicUpdates()
     Serial.print(bdrm_requestSetPoint);
     bedroomTemperatureSetPoint = floatFromSerial('!');
     
+    disableBedroomHeaterOnTimer();
     
+    if(maintainTemperature)
+          controlFurnace();
+       
+    if(blockHeaterEnabled)
+          controlBlockHeater();
+ 
     now = rtc.now();//read time from the RTC   
+    
     lastUpdateTime = now.unixtime();//update the timer for periodic updates
     
 }
