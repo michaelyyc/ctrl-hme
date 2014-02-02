@@ -1,5 +1,6 @@
 
-int buzzer = 13;
+int buzzer = 12;
+int LED = 13;
 int doorStatusPin = 9;
 bool doorStatus = false;
 
@@ -7,6 +8,7 @@ bool doorStatus = false;
 void setup() {                
   // initialize the digital pin as an output.
   pinMode(buzzer, OUTPUT);   
+  pinMode(LED, OUTPUT);
   pinMode(doorStatus, INPUT);  
 }
 
@@ -15,21 +17,72 @@ void loop() {
   //read input
   doorStatus = digitalRead(doorStatusPin);
   
-  while(!doorStatus)
+  if(!doorStatus)
   {
-    for(int i2 = 0; i2 < 5; i2++)
+    digitalWrite(LED, HIGH);
+    for(int i2 = 0; i2 < 4; i2++)
     {
-      for(int i = 0; i < 250; i++)
+      for(int i = 0; i < 100; i++)
       {
       digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
       delay(1);               // wait for a second
       digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
       delay(1);
       }
+      for(int i = 0; i < 250; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delay(2);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delay(2);
+      }
       delay(250);
+      doorStatus = digitalRead(doorStatusPin);
+      if(doorStatus)
+        break;
     }
-    delay(3500);
-    doorStatus = digitalRead(doorStatusPin);
-    
+    while(!doorStatus)//wait for door to close
+    {
+      doorStatus = digitalRead(doorStatusPin);
+    }
+      digitalWrite(LED, LOW);
+      for(int i = 0; i < 100; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delay(2);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delay(2);
+      }
+      for(int i = 0; i < 50; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delay(1);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delay(1);
+      }
+      delay(50);
+      for(int i = 0; i < 100; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delayMicroseconds(500);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delayMicroseconds(500);
+      }
+      delay(50);
+      for(int i = 0; i < 100; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delayMicroseconds(500);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delayMicroseconds(500);               // wait for a second
+      }
+      delay(50);
+      for(int i = 0; i < 100; i++)
+      {
+      digitalWrite(buzzer, HIGH);   // turn the LED on (HIGH is the voltage level)
+      delayMicroseconds(500);               // wait for a second
+      digitalWrite(buzzer, LOW);    // turn the LED off by making the voltage LOW
+      delayMicroseconds(500);               // wait for a second
+      }      
   }
 }
