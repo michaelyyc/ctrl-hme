@@ -17,7 +17,7 @@
  
  
  	Michael Bladon
- 	Dec 21, 2013 - Jan 12, 2014
+ 	Dec 21, 2013 - Feb 8, 2014
  */
 
 #include <Password.h>
@@ -36,11 +36,12 @@
 //Constants
 #define oneWireBus1                   7 // Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.33 // FW version
+#define FWversion                  0.34 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
-#define tempMinimumAllowed         17.0 //minimum temperature
+#define tempMinimumAllowed         15.0 //minimum temperature
+#define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
 #define blockHeaterOnHour             5 //hour in the morning to automatically turn on block heater
-#define blockHeaterOffHour           12 //hour to turn the block heater off automatically
+#define blockHeaterOffHour           11 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -5 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors
@@ -160,6 +161,10 @@ void setup()
 
   //get the initial periodic update values
   getPeriodicUpdates();
+  
+  //Because the first value requested from network usually times out, request it again during the startup sequence
+  Serial.print(grge_requestTempZone2); //relay the command to the serial port
+  garageTempOutdoor = floatFromSerial('!');  
   //saveToSDCard();
   //Initialize the RTC
   
@@ -324,6 +329,13 @@ void loop()
           {
                       server.print(F("Error - No reply from basement node"));
           }
+          else
+          {
+                      server.print(F("Not maintaining temperautre on main floor"));
+                      server.write(newLine);//new line
+                      server.write(carriageReturn);
+          }
+          
             
         }
 
@@ -336,8 +348,6 @@ void loop()
             server.print(F("Increased temp set point to: "));
             server.print(tempSetPoint);
             server.print(F(" deg C"));
-            server.write(newLine);//new line
-            server.write(carriageReturn);
           }
           else
             server.print(F("Maximum Temperature already Set"));
@@ -354,8 +364,6 @@ void loop()
             server.print(F("Decreased temp set point to: "));
             server.print(tempSetPoint);
             server.print(F(" deg C"));
-            server.write(newLine);//new line
-            server.write(carriageReturn);
           }
           else
             server.print(F("Minimum Temperature Already Reached"));
@@ -369,7 +377,7 @@ void loop()
           blockHeaterEnabled = true;
           server.print(F("Block Heater will turn on after "));
           server.print(blockHeaterOnHour);          
-          server.print(F(":00 AM if Temperature is below ")); 
+          server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
           server.print(F(" deg C"));         
           server.write(newLine);//new line
@@ -458,6 +466,7 @@ void loop()
         if(inputChar == grge_requestActivate120V1)
         {
           Serial.print(grge_requestActivate120V1);
+          blockHeaterEnabled == false; //This is necessary to prevent block heater from turning off right away if time or temp is out of range
           commandSent = true; //set the commandSent variable true so it is't sent again this loop          
           garageRelay120V1 = boolFromSerial();
           if(garageRelay120V1)
@@ -478,6 +487,7 @@ void loop()
         if(inputChar == grge_requestDeactivate120V1)
         {
           Serial.print(grge_requestDeactivate120V1);
+          blockHeaterEnabled == false; //This is necessary to prevent block heater from turning back on right away if time and temp are in range
           commandSent = true; //set the commandSent variable true so it is't sent again this loop          
           garageRelay120V1 = !boolFromSerial();
           if(garageRelay120V1)
@@ -686,6 +696,9 @@ void loop()
             server.print(bedroomTemperatureSetPoint);
             server.write(newLine);
             server.write(carriageReturn);
+            server.print(F("Heater will disable automatically at "));
+            server.print(bedroomHeaterAutoOffHour);
+            server.print(F(":00"));
           }
           else
           {
@@ -811,10 +824,10 @@ float readAmbientTemp()
   return temp;
 }
 
-void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off if called between 7:00 and 7:05AM.
+void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off if called within 5 minutes of bedroomHeaterAutoOffHour
 {
     now = rtc.now();
-    if(now.hour() == 7 && now.minute() <= 5)
+    if(now.hour() == bedroomHeaterAutoOffHour && now.minute() <= 5)
     {
       Serial.print(bdrm_dontMaintainSetPoint);
       bedroomMaintainTemp = !boolFromSerial();
@@ -888,7 +901,7 @@ void controlBlockHeater()
           garageRelay120V1 = boolFromSerial();
   }
   
-  if(now.hour() < blockHeaterOnHour  || now.hour() > blockHeaterOffHour || garageTempAmbient > (blockHeaterMaxTemp + 0.25))
+  if(now.hour() < blockHeaterOnHour  || now.hour() >= blockHeaterOffHour || garageTempAmbient > (blockHeaterMaxTemp + 0.25))
   {
           Serial.print(grge_requestDeactivate120V1);
           garageRelay120V1 = !boolFromSerial();
@@ -922,109 +935,52 @@ void sendCommandList()
           server.print(F("S : Status Report"));
           server.write(newLine);
           server.write(carriageReturn);
-          
-          
-          server.write(newLine);
-          server.print(F("GARAGE:"));
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("0 : Request FW Version"));
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("3 : Activate Door"));   
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("4 : Request Auto Close Status"));   
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("5 : Disable Auto Close"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("6 : Enable Auto Close"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("7 : Turn on Block Heater Now"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("8 : Turn off Block Heater Now"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("Q : Turn on Block Heater Automatically"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("R : Don't Turn on Block Heater Automatically"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("BASEMENT:"));   
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("A : Request FW Version"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("E : Turn Fan On"));   
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("F : Turn Fan and Furnace Off"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-
-          server.write(newLine);
-          server.print(F("MAIN FLOOR:"));   
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("K : Request FW Version"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("L : Request Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("M : Maintain Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("N : Do Not Maintain Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("O : Increase Set Temperature")); 
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("P : Decrease Set Temperature"));         
-          server.write(carriageReturn);
-          server.write(newLine);    
-          server.write(carriageReturn);
-          server.write(newLine);             
-          server.write(newLine);
-          server.print(F("BEDROOM:"));   
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("i : Request FW Version"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("j : Request Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("k : Increase Set Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("l : Decrease Set Temperature"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("m : Maintain Temperature")); 
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("n : Do Not Maintain Temperature"));  
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("o : Request Set Temperature"));           
-          server.write(carriageReturn);
-          server.write(newLine);    
-          server.write(carriageReturn);
-          server.write(newLine);   
           server.print(F("x : Log off"));
           server.write(carriageReturn);
           server.write(newLine);
+          
+          
+          server.write(newLine);
+          server.print(F("MAIN FLOOR:                           MASTER BEDROOM:"));
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("E : Turn Fan On                       k : Increase Set Temperature"));   
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("F : Turn Fan and Furnace Off          l : Decrease Set Temperature"));   
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("M : Maintain Set Temperature          m : Maintain Temperature"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("N : Do Not Maintain Temperature       n : Do Not Maintain Temperature"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("O : Increase Set Temperature"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("P : Decrease Set Temperature"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.write(carriageReturn);
+
+          server.print(F("GARAGE:"));   
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("3 : Activate Door                     7 : Turn on Block Heater Now"));   
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("4 : Request Auto Close Status         8 : Turn off Block Heater Now"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("5 : Disable Auto Close                Q : Enable Block Heater Timer"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("6 : Enable Auto Close                 R : Disable Block Heater Timer"));
+          server.write(carriageReturn);
+          server.write(newLine);
+
 
 }
 
@@ -1101,7 +1057,7 @@ void sendStatusReport()
         {
           server.print(F("Block Heater will turn on after "));
           server.print(blockHeaterOnHour);          
-          server.print(F(":00 AM if Temperature is below ")); 
+          server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
           server.print(F(" deg C"));         
           server.write(newLine);//new line
