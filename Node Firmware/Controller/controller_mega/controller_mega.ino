@@ -40,9 +40,9 @@
 
 
 //Constants
-#define oneWireBus1                   7 // Temperature Sensor
+#define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.50 // FW version
+#define FWversion                  0.52 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
@@ -71,8 +71,6 @@
 
 
 EthernetServer server = EthernetServer(23); //Set up the ethernet server on port 23 (standard telnet port)
-
-  
   
 /* 1-WIRE Configuration 
  A DS18B20 1-wire temperature sensor is connected on pin defined as OneWireBus1
@@ -89,19 +87,49 @@ RTC_DS1307 rtc; //the realtime clock object
 DateTime now; //variable to store the current date & time from the RTC
 DateTime startup; //store the power-on time for calculating up-time
 DateTime lastUpdateTime;
+int lastLogMinute; //used to keep track of SD card logging and log only once per minute
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
 float tempAmbient = -127.0; //value used to store ambient temperature as measured by 1-wire sensor
 Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
 float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
-bool maintainTemperature = false; //Furnace ON/Off commands are only sent if this is true
+bool maintainTemperature = true; //Furnace ON/Off commands are only sent if this is true
 bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
 bool blockHeaterEnabled = false; //If this is true, blockheater automatically turns on and off with temperature and time
 bool validPassword = false; //This is true any time a valid user is logged in
 bool commandSent = false; //this tracks whether the controller has already relayed the command to the network, prevents sending it twice
 bool SDCardLog = false; //We only attempt to write to the SD card if this is true
 unsigned long timeOfLastInput = 0;//this is used to determine if the client interaction has timed out
+
+//Variables for Automatic Thermostat [weekdays]
+int thermostatWeekdayTimePeriod1HourStart = 5;
+int thermostatWeekdayTimePeriod1MinuteStart = 45; //system on-time in the morning
+float thermostatWeekdayTimePeriod1SetPoint = 21.0;
+int thermostatWeekdayTimePeriod2HourStart = 12;
+int thermostatWeekdayTimePeriod2MinuteStart = 15; //reduce temperature when leaving for work
+float thermostatWeekdayTimePeriod2SetPoint = 16.5;
+int thermostatWeekdayTimePeriod3HourStart = 16;
+int thermostatWeekdayTimePeriod3MinuteStart = 0; //heat up before we get home from work
+float thermostatWeekdayTimePeriod3SetPoint = 21.0;
+int thermostatWeekdayTimePeriod4HourStart = 22;
+int thermostatWeekdayTimePeriod4MinuteStart = 0; //turn down when going to bed
+float thermostatWeekdayTimePeriod4SetPoint = 17.0;
+
+
+//Variables for the automatic Thermostat [weekends]
+int thermostatWeekendTimePeriod1HourStart = 8;
+int thermostatWeekendTimePeriod1MinuteStart = 00; //system on-time in the morning
+float thermostatWeekendTimePeriod1SetPoint = 21.0;
+int thermostatWeekendTimePeriod2HourStart = 12;
+int thermostatWeekendTimePeriod2MinuteStart = 0; //reduce temperature when leaving for work
+float thermostatWeekendTimePeriod2SetPoint = 18;
+int thermostatWeekendTimePeriod3HourStart = 17;
+int thermostatWeekendTimePeriod3MinuteStart = 0; //heat up before we get home from work
+float thermostatWeekendTimePeriod3SetPoint = 21.0;
+int thermostatWeekendTimePeriod4HourStart = 22;
+int thermostatWeekendTimePeriod4MinuteStart = 0; //turn down when going to bed
+float thermostatWeekendTimePeriod4SetPoint = 17.0;
 
 
 //Global variables from the basement node
@@ -115,13 +143,14 @@ bool garageDoorStatus = false;
 bool garageDoorError = false; //track whether garage door error flag is set
 bool garageLastDoorActivation = false; //keep track of whether the last door activation was to open or close. 0 = open, 1 = close
 bool garageAutoCloseStatus = false; // track whether auto close is enabled or not
-bool garageRelay120V1 = 0; //track whether the 120V outlet is on, 1 = on, 0 = off
+bool blockHeaterStatus = 0; //track whether the 120V outlet is on, 1 = on, 0 = off
 
 //Global variables from the bedroom node
 float bedroomFirmware = -1;
 float bedroomTemperature = -127.0;
 float bedroomTemperatureSetPoint = -127.0;
 bool bedroomMaintainTemp = false;
+bool bedroomHeaterStatus = false;
 
 /* SETUP - RUN ONCE
  	Setup function initializes some variables and sets up the serial and ethernet ports
@@ -166,8 +195,8 @@ void setup()
   sensors1.begin();
 
   //initialize the serioal ports 
-  Serial.begin(9600);
-  Serial1.begin(9600);
+  Serial.begin(9600); //diagnostic output port
+  Serial1.begin(9600); //XBEE network port
 
   // initialize the ethernet device
   Ethernet.begin(mac, ip, gateway, subnet);
@@ -181,6 +210,8 @@ void setup()
   //Because the first value requested from network usually times out, request it again during the startup sequence
   Serial1.print(grge_requestTempZone2); //relay the command to the serial port
   garageTempOutdoor = floatFromSerial1('!');  
+  
+  lastLogMinute = now.minute() - 1; // initialize the last logged time so that the logging function will always save on the first call
   saveToSDCard();
 
 }
@@ -310,24 +341,22 @@ void loop()
           server.write(carriageReturn);
         }
 
-        if(inputChar == ctrl_requestTemp)
+ /*       if(inputChar == ctrl_requestTemp)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Main Floor Temperature: "));
           server.print(tempAmbient);
-          server.print(F(" deg C"));
+          server.print(F(" `C"));
           server.write(newLine);//new line
           server.write(carriageReturn);
         }
-
+*/
         if(inputChar == ctrl_enableFurnace)
 
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           maintainTemperature = true;
-          server.print(F("Furnace enabled, maintain "));
-          server.print(tempSetPoint);
-          server.print(F(" deg C at upstairs sensor"));
+          server.print(F("Main Thermostat On"));
           server.write(newLine);//new line
           server.write(carriageReturn);
         }
@@ -344,7 +373,7 @@ void loop()
           }
           else
           {
-                      server.print(F("Not maintaining temperautre on main floor"));
+                      server.print(F("Main Thermostat Off"));
                       server.write(newLine);//new line
                       server.write(carriageReturn);
           }
@@ -360,7 +389,7 @@ void loop()
             tempSetPoint = tempSetPoint + 0.25;
             server.print(F("Increased temp set point to: "));
             server.print(tempSetPoint);
-            server.print(F(" deg C"));
+            server.print(F(" `C"));
           }
           else
             server.print(F("Maximum Temperature already Set"));
@@ -376,7 +405,7 @@ void loop()
             tempSetPoint = tempSetPoint - 0.25;
             server.print(F("Decreased temp set point to: "));
             server.print(tempSetPoint);
-            server.print(F(" deg C"));
+            server.print(F(" `C"));
           }
           else
             server.print(F("Minimum Temperature Already Reached"));
@@ -392,7 +421,7 @@ void loop()
           server.print(blockHeaterOnHour);          
           server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
-          server.print(F(" deg C"));         
+          server.print(F(" `C"));         
           server.write(newLine);//new line
           server.write(carriageReturn);         
         }
@@ -431,7 +460,7 @@ void loop()
           sendCommandList();
         }  
 
-
+/*
         //Defined commands not handled by this node
         //relay them and store results in variables in the controller
         if(inputChar == grge_requestFWVer)
@@ -453,7 +482,7 @@ void loop()
             server.write(newLine);  
           }
         }
-
+*/
 
         if(inputChar == grge_requestActivateDoor)
         {
@@ -481,8 +510,8 @@ void loop()
           Serial1.print(grge_requestActivate120V1);
           blockHeaterEnabled == false; //This is necessary to prevent block heater from turning off right away if time or temp is out of range
           commandSent = true; //set the commandSent variable true so it is't sent again this loop          
-          garageRelay120V1 = boolFromSerial1();
-          if(garageRelay120V1)
+          blockHeaterStatus = boolFromSerial1();
+          if(blockHeaterStatus)
           {
             server.print(F("120V outlet is now ON"));
             server.write(carriageReturn);
@@ -502,8 +531,8 @@ void loop()
           Serial1.print(grge_requestDeactivate120V1);
           blockHeaterEnabled == false; //This is necessary to prevent block heater from turning back on right away if time and temp are in range
           commandSent = true; //set the commandSent variable true so it is't sent again this loop          
-          garageRelay120V1 = !boolFromSerial1();
-          if(garageRelay120V1)
+          blockHeaterStatus = !boolFromSerial1();
+          if(blockHeaterStatus)
           {
             server.print(F("ERROR: 120V outlet is now ON"));
             server.write(carriageReturn);
@@ -598,13 +627,13 @@ void loop()
 
         }
 
-
+/*
         if(inputChar == grge_requestTempZone2)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Outdoor Temperature is: "));
           server.print(garageTempOutdoor);
-          server.print(F(" deg C"));
+          server.print(F(" `C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -614,11 +643,11 @@ void loop()
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Garage Temperature is: "));
           server.print(garageTempAmbient);
-          server.print(F(" deg C"));
+          server.print(F(" `C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
-
+*/
         if(inputChar == grge_requestDoorStatus)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -628,20 +657,21 @@ void loop()
 
 
         //BASEMENT NODE COMMANDS
-
+/*
         if(inputChar == bsmt_requestTemp)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Basement Temperature is: "));
           server.print(basementTempAmbient);
-          server.print(F(" deg C"));
+          server.print(F(" `C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
-
+*/
 
 
         //BEDROOM NODE COMMANDS
+/*
          if(inputChar == bdrm_requestFWVer)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -652,8 +682,8 @@ void loop()
           server.write(newLine);
           server.write(carriageReturn);
         }       
-
-
+*/
+/*
          if(inputChar == bdrm_requestTemp)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -664,7 +694,7 @@ void loop()
           server.write(newLine);
           server.write(carriageReturn);
         }
-        
+ */       
         if(inputChar == bdrm_increaseSetPoint)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -705,9 +735,8 @@ void loop()
           bedroomMaintainTemp = boolFromSerial1();
           if(bedroomMaintainTemp)
           {
-            server.print(F("Maintaining Bedroom Set Point: "));
-            server.print(bedroomTemperatureSetPoint);
-            server.print(F(" Deg C Until "));
+            server.print(F("Bedroom Thermostat On"));
+           server.print(F(" Until "));
             server.print(bedroomHeaterAutoOffHour);
             server.print(F(":00h"));
             server.write(newLine);
@@ -729,7 +758,7 @@ void loop()
           bedroomMaintainTemp = !boolFromSerial1();
           if(!bedroomMaintainTemp)
           {
-            server.print(F("Bedroom Heater Disabled"));
+            server.print(F("Bedroom Thermostat Off"));
             server.write(newLine);
             server.write(carriageReturn);
           }
@@ -855,6 +884,14 @@ void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off i
 
 void controlFurnace()
 {
+  //Make sure tempSetPoint is reasonable. This is a safety feature to prevent house over-heating
+  if(tempSetPoint < tempMinimumAllowed || tempSetPoint > tempMaximumAllowed)
+  {
+    Serial.println("ERROR: Temperature Setpoint of of range!");
+    return;
+  }
+  
+  
   //Control furnace by sending commands to the basement node based on tempAmbient
 
   if(tempAmbient == (-127.0 + tempOffset) || tempAmbient == (0.0 + tempOffset))
@@ -882,7 +919,7 @@ void controlFurnace()
         Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
 //        server.print(F("sent ON command to basement node ")); 
 //        server.print(tempAmbient);
-//        server.print(F(" deg C ")); 
+//        server.print(F(" `C ")); 
         if(boolFromSerial1())
           {
 //            server.print(F("ACK"));
@@ -911,13 +948,13 @@ void controlBlockHeater()
   if(now.hour() >= blockHeaterOnHour && now.hour() <= blockHeaterOffHour && garageTempAmbient < (blockHeaterMaxTemp - 0.25))
   {
           Serial1.print(grge_requestActivate120V1);
-          garageRelay120V1 = boolFromSerial1();
+          blockHeaterStatus = boolFromSerial1();
   }
   
   if(now.hour() < blockHeaterOnHour  || now.hour() >= blockHeaterOffHour || garageTempAmbient > (blockHeaterMaxTemp + 0.25))
   {
           Serial1.print(grge_requestDeactivate120V1);
-          garageRelay120V1 = !boolFromSerial1();
+          blockHeaterStatus = !boolFromSerial1();
   }
   return;  
 }
@@ -999,87 +1036,93 @@ void sendCommandList()
 
 void sendStatusReport()
 {
-      server.print(F("Main Floor Temperature:     "));
+      server.print(F("Temperatures"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+      server.print(F("Main Floor:     "));
       server.print(tempAmbient);
-      server.print(F(" deg C"));
+      server.print(F(" `C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-      server.print(F("Bedroom Temperature:        "));
+      server.print(F("Bedroom:        "));
       server.print(bedroomTemperature);
-      server.print(F(" deg C"));
+      server.print(F(" `C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
       
-      server.print(F("Basement Temperature:       "));
+      server.print(F("Basement:       "));
       server.print(basementTempAmbient);
-      server.print(F(" deg C"));
+      server.print(F(" `C"));
       server.write(newLine);
       server.write(carriageReturn);
 
-      server.print(F("Garage Temperature:         "));
+      server.print(F("Garage:         "));
       server.print(garageTempAmbient);
-      server.print(F(" deg C"));
+      server.print(F(" `C"));
       server.write(newLine);
       server.write(carriageReturn);
 
-      server.print(F("Outdoor Temperature:        "));  
+      server.print(F("Outdoor:        "));  
       server.print(garageTempOutdoor);
-      server.print(F(" deg C"));
+      server.print(F(" `C"));
       server.write(newLine);
       server.write(carriageReturn);
       server.write(newLine);
-      server.write(carriageReturn);
-      
+      server.write(carriageReturn); 
+
+      server.print(F("Bedroom Thermostat:  "));
+      server.print(bedroomTemperatureSetPoint);
+      server.print(F(" `C"));
+  
+          
      if(bedroomMaintainTemp)
         {    
-          server.print(F("Bedroom Thermostat ON - Set:"));
-          server.print(bedroomTemperatureSetPoint);
-        }
+          server.print(F(" ON"));
+        }    
         
       else
         {
-          server.print(F("Bedroom Thermostat OFF Set: "));
-          server.print(bedroomTemperatureSetPoint);
-   
+          server.print(F(" OFF"));
         }
-        
-        server.print(F(" Deg C in Bedroom"));
-        server.write(newLine);
-        server.write(carriageReturn);  
-  
+
+        server.write(newLine);//new line
+        server.write(carriageReturn); 
+          
+       server.print(F("Main Thermostat   :  "));
+       server.print(tempSetPoint);  
+       server.print(F(" `C"));
+
           
      if(maintainTemperature)
         {    
-          server.print(F("Main Thermostat ON - Set:   "));
-          server.print(tempSetPoint);
-        }
+          server.print(F(" ON  "));
+        }    
         
       else
         {
-          server.print(F("Main Thermostat OFF Set:    "));
-          server.print(tempSetPoint);
-  
+          server.print(F(" OFF  "));
         }
 
-        server.print(F(" Deg C on Main Floor"));
         server.write(newLine);//new line
         server.write(carriageReturn); 
         
+        
+        server.print(F("Block Heater will "));
         if(blockHeaterEnabled)
         {
-          server.print(F("Block Heater will turn on after "));
+          server.print(F("turn on after "));
           server.print(blockHeaterOnHour);          
           server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
-          server.print(F(" deg C"));         
+          server.print(F(" `C in garage"));         
           server.write(newLine);//new line
           server.write(carriageReturn);     
         }
         
         else
         {
-         server.print(F("Block heater will not turn on automatically")); 
+         server.print(F("not turn on automatically")); 
          server.write(newLine);//new line
          server.write(carriageReturn);     
         }
@@ -1089,7 +1132,7 @@ void sendStatusReport()
   
 
         
-        server.print(F("Furnace is currently "));
+        server.print(F("Furnace is "));
         
         if(furnaceStatus)
         {
@@ -1107,7 +1150,7 @@ void sendStatusReport()
         
         server.print(F("Bedroom Heater is "));
 
-        if(bedroomMaintainTemp && (bedroomTemperature < (bedroomTemperatureSetPoint - 0.25)))
+        if(bedroomHeaterStatus)
         {
           server.print(F("ON"));
           server.write(newLine);
@@ -1127,7 +1170,7 @@ void sendStatusReport()
 
         }       
         
-        if(garageRelay120V1)
+        if(blockHeaterStatus)
         {    
           server.print(F("ON"));
           server.write(newLine);
@@ -1152,12 +1195,20 @@ void sendStatusReport()
           server.write(newLine);
           server.print(F("Memory Used: "));
           server.print(8192 - freeRam());
-          server.print(F(" / 8192 Bytes"));
+          server.print(F(" / 8192 Bytes ["));
+          server.print((freeRam/8192)*100);
+          server.print(F("% free]"));
           server.write(carriageReturn);
           server.write(newLine);
           server.print(F("Uptime: "));
           sendUptime();
-          
+          if(!SDCardLog)
+         {
+          server.print(("NOT "));
+         }
+          server.print(F("Logging to SD Card"));
+          server.write(carriageReturn);
+          server.write(newLine);
        now = rtc.now();//update the time from the RTC
       
        server.print(F("System Time: "));
@@ -1185,12 +1236,15 @@ void sendStatusReport()
        server.write(carriageReturn);
        server.write(newLine);    
                
+               
+             
 }
 
 void sendUptime()
 {
   now = rtc.now();
-  DateTime uptime = now.unixtime() - startup.unixtime();
+ // DateTime uptime = now.unixtime() - startup.unixtime();
+ DateTime uptime = now.unixtime() - startup.unixtime();
 
   long uptimeSeconds = uptime.unixtime();
           if(uptimeSeconds < 60)
@@ -1222,17 +1276,12 @@ void sendUptime()
           {
              server.print(uptimeSeconds/86400);
              server.print(F(" days"));
-          }                    
+          }   
+          
           server.write(carriageReturn);
           server.write(newLine);
           
-         if(!SDCardLog)
-         {
-          server.print(("NOT "));
-         }
-          server.print(F("Logging to SD Card"));
-          server.write(carriageReturn);
-          server.write(newLine);
+
 }
 
 void requestAndUpdateGarageDoorStatus()
@@ -1274,14 +1323,24 @@ void getPeriodicUpdates()
     bedroomTemperature = floatFromSerial1('!');
     Serial1.print(bdrm_requestSetPoint);
     bedroomTemperatureSetPoint = floatFromSerial1('!');
-    
-    disableBedroomHeaterOnTimer();
+ 
+    //Determine bedroom heater Status
+    if(bedroomMaintainTemp && (bedroomTemperature < (bedroomTemperatureSetPoint - 0.25)))
+       bedroomHeaterStatus = true;
+       
+     else
+       bedroomHeaterStatus = false;
+ 
+    //Perform time-triggered actions   
+    disableBedroomHeaterOnTimer(); //Disable bedroom heater at pre-defined time
+    automaticTempSetPoint(); //set the temperature set point based on day and time
     
     if(maintainTemperature)
           controlFurnace();
        
     if(blockHeaterEnabled)
           controlBlockHeater();
+          
  
     now = rtc.now();//read time from the RTC   
     
@@ -1289,10 +1348,53 @@ void getPeriodicUpdates()
     
 }
 
+void automaticTempSetPoint()
+{
+  now = rtc.now();//update the time from the RTC
+
+//Is it a weekday?
+
+  if(now.dayOfWeek() < 6)
+  {
+  if(now.hour() == thermostatWeekdayTimePeriod1HourStart && now.minute() == thermostatWeekdayTimePeriod1MinuteStart)
+    tempSetPoint = thermostatWeekdayTimePeriod1SetPoint;
+    
+  if(now.hour() == thermostatWeekdayTimePeriod2HourStart && now.minute() == thermostatWeekdayTimePeriod2MinuteStart)
+     tempSetPoint = thermostatWeekdayTimePeriod2SetPoint;
+
+  if(now.hour() == thermostatWeekdayTimePeriod3HourStart && now.minute() == thermostatWeekdayTimePeriod3MinuteStart)
+     tempSetPoint = thermostatWeekdayTimePeriod3SetPoint;
+
+  if(now.hour() == thermostatWeekdayTimePeriod4HourStart && now.minute() == thermostatWeekdayTimePeriod4MinuteStart)
+     tempSetPoint = thermostatWeekdayTimePeriod4SetPoint;
+  }
+  if(now.dayOfWeek() > 6)
+  {
+  if(now.hour() == thermostatWeekendTimePeriod1HourStart && now.minute() == thermostatWeekendTimePeriod1MinuteStart)
+    tempSetPoint = thermostatWeekendTimePeriod1SetPoint;
+    
+  if(now.hour() == thermostatWeekendTimePeriod2HourStart && now.minute() == thermostatWeekendTimePeriod2MinuteStart)
+     tempSetPoint = thermostatWeekendTimePeriod2SetPoint;
+
+  if(now.hour() == thermostatWeekendTimePeriod3HourStart && now.minute() == thermostatWeekendTimePeriod3MinuteStart)
+     tempSetPoint = thermostatWeekendTimePeriod3SetPoint;
+
+  if(now.hour() == thermostatWeekendTimePeriod4HourStart && now.minute() == thermostatWeekendTimePeriod4MinuteStart)
+     tempSetPoint = thermostatWeekendTimePeriod4SetPoint;       
+  }
+  return;
+}
+
+
 //This function saves all the data to an SD card in a CSV file format
 void saveToSDCard()
 {
-
+  if(lastLogMinute == now.minute())
+  {
+    return; // don't log anything if it's less than a minute since last event
+  }
+  lastLogMinute = now.minute();
+  
   File dataFile = SD.open("datalog.csv", FILE_WRITE);
   
   if(!dataFile)
@@ -1307,14 +1409,26 @@ void saveToSDCard()
   String dataString = "";
   dataString += now.year();
     dataString += "-";
+  if(now.month() < 10)
+    dataString += "0";
+  
   dataString += now.month();
     dataString += "-";
+  if(now.day() < 10)
+    dataString += "0";
+
   dataString += now.day();
   dataString += ",";
+    if(now.hour() < 10)
+    dataString += "0";
   dataString += now.hour();
     dataString += ":";
+      if(now.minute() < 10)
+    dataString += "0";
   dataString += now.minute();
     dataString += ":";
+      if(now.second() < 10)
+    dataString += "0";
   dataString += now.second();
   dataString += ",";
   //add data variables here
@@ -1334,19 +1448,17 @@ void saveToSDCard()
   dataString += ",";
   dataString += String(bedroomMaintainTemp);
   dataString += ",";
-  dataString += String(bedroomMaintainTemp);
-  dataString += ",";
-  dataString += String(blockHeaterEnabled);
+  dataString += String(bedroomHeaterStatus);
   dataString += ",";
   dataString += String(basementTempAmbient);
   dataString += ",";
-  dataString += String(garageTempOutdoor);
-  dataString += ",";
   dataString += String(garageTempAmbient);
   dataString += ",";
-
-
-  dataString += String(garageRelay120V1);
+  dataString += String(garageTempOutdoor);
+  dataString += ",";
+  dataString += String(blockHeaterEnabled);
+  dataString += ",";
+  dataString += String(blockHeaterStatus);
   dataString += ",";  
   dataString += String(validPassword);
  
@@ -1355,7 +1467,6 @@ void saveToSDCard()
   //End of data variables
   
   dataFile.println(dataString);
-  Serial.print("Logging ");
   Serial.println(dataString);
   dataFile.close(); 
   
@@ -1363,7 +1474,6 @@ void saveToSDCard()
 
 void writeHeaderToSDCard()
 {
-
   File dataFile = SD.open("datalog.csv", FILE_WRITE);
   
   if(!dataFile)
@@ -1397,28 +1507,24 @@ void writeHeaderToSDCard()
   dataString += ",";
   dataString += String("bedroomMaintainTemp");
   dataString += ",";
-  dataString += String("bedroomMaintainTemp");
-  dataString += ",";
-  dataString += String("blockHeaterEnabled");
+  dataString += String("bedroomHeaterStatus");
   dataString += ",";
   dataString += String("basementTempAmbient");
   dataString += ",";
-  dataString += String("garageTempOutdoor");
-  dataString += ",";
   dataString += String("garageTempAmbient");
   dataString += ",";
-
-
-  dataString += String("garageRelay120V1");
+  dataString += String("garageTempOutdoor");
+  dataString += ",";
+  dataString += String("blockHeaterEnabled");
+  dataString += ",";
+  dataString += String("blockHeaterStatus");
+  dataString += ",";  
+  dataString += String("blockHeaterStatus");
   dataString += ",";  
   dataString += String("validPassword");
  
-
-
   //End of data variables
-  
   dataFile.println(dataString);
-  Serial.print("Logging ");
   Serial.println(dataString);
   dataFile.close(); 
   
