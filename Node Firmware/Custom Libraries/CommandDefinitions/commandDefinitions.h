@@ -8,6 +8,9 @@
   	#define ctrl_listCommands              63 // ?
   	#define ctrl_logOff                   120 // x
   	#define ctrl_statusReport			   83 //S
+    #define ctrl_disableBlockHeater   	 'R' //R
+    #define ctrl_listCommands              '?' // ?
+
 
 //BASEMENT COMMANDS
 //Commands from the controller
