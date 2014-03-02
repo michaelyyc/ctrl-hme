@@ -24,8 +24,6 @@
         Serial0 used for bootloading and diagnostics
  */
 
-
-
 #include <Password.h>
 #include <SPI.h>
 #include <Ethernet.h>
@@ -42,16 +40,18 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.52 // FW version
+#define FWversion                  0.58 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
-#define blockHeaterOnHour             5 //hour in the morning to automatically turn on block heater
-#define blockHeaterOffHour           11 //hour to turn the block heater off automatically
-#define blockHeaterMaxTemp           -5 //maximum temperature INSIDE garage for block heater use
+#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
+#define blockHeaterOffHour            9 //hour to turn the block heater off automatically
+#define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
-#define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors
+#define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
+#define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
 #define clientTimeoutLimit        90000 //number of seconds before assuming the client has disconnected
+#define tempHysterisis             0.35 //used for main floor thermostat control
 
 //ASCII values
 #define newLine                      10 // ASCII NEW LINE
@@ -93,7 +93,7 @@ int i = 0; //for for loops
 float tempAmbient = -127.0; //value used to store ambient temperature as measured by 1-wire sensor
 Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
-float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
+//float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
 bool maintainTemperature = true; //Furnace ON/Off commands are only sent if this is true
 bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
 bool blockHeaterEnabled = false; //If this is true, blockheater automatically turns on and off with temperature and time
@@ -104,13 +104,13 @@ unsigned long timeOfLastInput = 0;//this is used to determine if the client inte
 
 //Variables for Automatic Thermostat [weekdays]
 int thermostatWeekdayTimePeriod1HourStart = 5;
-int thermostatWeekdayTimePeriod1MinuteStart = 45; //system on-time in the morning
+int thermostatWeekdayTimePeriod1MinuteStart = 30; //system on-time in the morning
 float thermostatWeekdayTimePeriod1SetPoint = 21.0;
-int thermostatWeekdayTimePeriod2HourStart = 12;
+int thermostatWeekdayTimePeriod2HourStart = 7;
 int thermostatWeekdayTimePeriod2MinuteStart = 15; //reduce temperature when leaving for work
 float thermostatWeekdayTimePeriod2SetPoint = 16.5;
-int thermostatWeekdayTimePeriod3HourStart = 16;
-int thermostatWeekdayTimePeriod3MinuteStart = 0; //heat up before we get home from work
+int thermostatWeekdayTimePeriod3HourStart = 15;
+int thermostatWeekdayTimePeriod3MinuteStart = 30; //heat up before we get home from work
 float thermostatWeekdayTimePeriod3SetPoint = 21.0;
 int thermostatWeekdayTimePeriod4HourStart = 22;
 int thermostatWeekdayTimePeriod4MinuteStart = 0; //turn down when going to bed
@@ -122,13 +122,13 @@ int thermostatWeekendTimePeriod1HourStart = 8;
 int thermostatWeekendTimePeriod1MinuteStart = 00; //system on-time in the morning
 float thermostatWeekendTimePeriod1SetPoint = 21.0;
 int thermostatWeekendTimePeriod2HourStart = 12;
-int thermostatWeekendTimePeriod2MinuteStart = 0; //reduce temperature when leaving for work
+int thermostatWeekendTimePeriod2MinuteStart = 0; //reduce temperature when leaving 
 float thermostatWeekendTimePeriod2SetPoint = 18;
 int thermostatWeekendTimePeriod3HourStart = 17;
-int thermostatWeekendTimePeriod3MinuteStart = 0; //heat up before we get home from work
+int thermostatWeekendTimePeriod3MinuteStart = 0; //heat up before we get home 
 float thermostatWeekendTimePeriod3SetPoint = 21.0;
 int thermostatWeekendTimePeriod4HourStart = 22;
-int thermostatWeekendTimePeriod4MinuteStart = 0; //turn down when going to bed
+int thermostatWeekendTimePeriod4MinuteStart = 30; //turn down when going to bed
 float thermostatWeekendTimePeriod4SetPoint = 17.0;
 
 
@@ -171,7 +171,7 @@ void setup()
   //Initialize the SD card
 
   pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
+  digitalWrite(10, HIGH);//Needed to enable SD card write
   if (SD.begin(chipSelect))
     {
       SDCardLog = true;
@@ -180,10 +180,6 @@ void setup()
     }
    else
       Serial.println("SD Card Failed to Initialize");
-
-  
-  
- 
   
   //Initialize the Ethernet Adapter
   byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
@@ -213,7 +209,6 @@ void setup()
   
   lastLogMinute = now.minute() - 1; // initialize the last logged time so that the logging function will always save on the first call
   saveToSDCard();
-
 }
 
 void loop()
@@ -291,18 +286,7 @@ void loop()
       {
         server.print(F("Session Timeout - Disconnecting"));
         server.write(newLine);
-        server.write(carriageReturn);
-        
-        
-        server.print(F("Time of last input: "));
-        server.print(timeOfLastInput);
-        server.write(newLine);
-        server.write(carriageReturn);
-        server.print(F("Now: "));
-        server.print(millis());
-        server.write(newLine);
-        server.write(carriageReturn);   
-        
+        server.write(carriageReturn);  
         client.stop();
         password.reset();
         timeOfLastInput = millis();    
@@ -790,18 +774,22 @@ void loop()
         commandSent = false;
       }
 
-      //RELAY SERIAL DATA TO TELNET CLIENT
+      //RELAY SERIAL DATA TO TELNET CLIENT OR Serial0
       if(Serial1.available())
       {
         inputChar = Serial1.read();//read the serial input
-        server.write(inputChar);//output the serial input to the telnet client
+        //server.write(inputChar);//output the serial input to the telnet client
+        Serial.print(inputChar);
       }
       now = rtc.now();//get time from the RTC
-      if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelay) //Update the temp sensors and send furnace commands if needed
+      if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelayLong) //Update the temp sensors and send furnace commands if needed
       {
+        server.print(F("Updating sensor data..."));
         getPeriodicUpdates();//Update the temperature and other sensors
         saveToSDCard();
-       
+        server.print(F("Done"));
+        server.write(newLine);
+        server.write(carriageReturn);       
      
       }
       if(didClientTimeout())
@@ -809,16 +797,6 @@ void loop()
         server.print(F("Session Timeout - Disconnecting"));
         server.write(newLine);
         server.write(carriageReturn);
-        
-        
-        server.print(F("Time of last input: "));
-        server.print(timeOfLastInput);
-        server.write(newLine);
-        server.write(carriageReturn);
-        server.print(F("Now: "));
-        server.print(millis());
-        server.write(newLine);
-        server.write(carriageReturn);   
         
         client.stop();
         password.reset();
@@ -837,9 +815,6 @@ void loop()
       {
         getPeriodicUpdates();//Update the temperature and other sensors
         saveToSDCard();
-
-        
-     
       }
       
   //If there is no telnet client connected, just read and ignore the serial port
@@ -847,17 +822,16 @@ void loop()
   //Only one byte is ignored per loop but the serial port at 9600 baud shouldn't be faster than the main loop
   if(Serial1.available())
   {
-    Serial1.read();
+    inputChar = Serial1.read();
+    Serial.write(inputChar);
   }
 
 }// END OF THE MAIN LOOP FUNCTION
 
 
-/* readAmbientTemp()
- 	This function collects a temperature reading in degrees C from the 1-wire
- 	sensor and returns it as a float
- */
-
+// readAmbientTemp()
+// 	This function collects a temperature reading in degrees C from the 1-wire
+// 	sensor and returns it as a float
 float readAmbientTemp()
 {
   float temp;
@@ -945,7 +919,7 @@ void controlFurnace()
 void controlBlockHeater()
 {
   now = rtc.now();//update the time
-  if(now.hour() >= blockHeaterOnHour && now.hour() <= blockHeaterOffHour && garageTempAmbient < (blockHeaterMaxTemp - 0.25))
+  if(now.hour() >= blockHeaterOnHour && now.hour() < blockHeaterOffHour && garageTempAmbient < (blockHeaterMaxTemp - 0.25))
   {
           Serial1.print(grge_requestActivate120V1);
           blockHeaterStatus = boolFromSerial1();
@@ -1196,7 +1170,7 @@ void sendStatusReport()
           server.print(F("Memory Used: "));
           server.print(8192 - freeRam());
           server.print(F(" / 8192 Bytes ["));
-          server.print((freeRam/8192)*100);
+          server.print((freeRam()/(float(8192))*(float(100))));
           server.print(F("% free]"));
           server.write(carriageReturn);
           server.write(newLine);
@@ -1235,9 +1209,7 @@ void sendStatusReport()
        server.print(F(" "));
        server.write(carriageReturn);
        server.write(newLine);    
-               
-               
-             
+                        
 }
 
 void sendUptime()
@@ -1354,7 +1326,7 @@ void automaticTempSetPoint()
 
 //Is it a weekday?
 
-  if(now.dayOfWeek() < 6)
+  if(now.dayOfWeek() < 0 && now.dayOfWeek() < 6) // Monday = 1, Friday = 5
   {
   if(now.hour() == thermostatWeekdayTimePeriod1HourStart && now.minute() == thermostatWeekdayTimePeriod1MinuteStart)
     tempSetPoint = thermostatWeekdayTimePeriod1SetPoint;
@@ -1368,7 +1340,7 @@ void automaticTempSetPoint()
   if(now.hour() == thermostatWeekdayTimePeriod4HourStart && now.minute() == thermostatWeekdayTimePeriod4MinuteStart)
      tempSetPoint = thermostatWeekdayTimePeriod4SetPoint;
   }
-  if(now.dayOfWeek() > 6)
+  if(now.dayOfWeek() == 0 || now.dayOfWeek() == 6) //sunday = 0, saturday = 6
   {
   if(now.hour() == thermostatWeekendTimePeriod1HourStart && now.minute() == thermostatWeekendTimePeriod1MinuteStart)
     tempSetPoint = thermostatWeekendTimePeriod1SetPoint;
@@ -1389,9 +1361,9 @@ void automaticTempSetPoint()
 //This function saves all the data to an SD card in a CSV file format
 void saveToSDCard()
 {
-  if(lastLogMinute == now.minute())
+  if(lastLogMinute == now.minute() && garageDoorStatus)
   {
-    return; // don't log anything if it's less than a minute since last event
+    return; // don't log anything if it's less than a minute since last event, unless the garage door is opened.
   }
   lastLogMinute = now.minute();
   
@@ -1418,7 +1390,7 @@ void saveToSDCard()
     dataString += "0";
 
   dataString += now.day();
-  dataString += ",";
+  dataString += " ";
     if(now.hour() < 10)
     dataString += "0";
   dataString += now.hour();
@@ -1487,7 +1459,7 @@ void writeHeaderToSDCard()
   //make a string for assembling the data to log
   String dataString = "";
   dataString += String("Date");
-  dataString += ",";
+  dataString += " ";
   dataString += String("Time");
   dataString += ",";
   //add data variables here
@@ -1519,10 +1491,10 @@ void writeHeaderToSDCard()
   dataString += ",";
   dataString += String("blockHeaterStatus");
   dataString += ",";  
-  dataString += String("blockHeaterStatus");
-  dataString += ",";  
   dataString += String("validPassword");
- 
+  dataString += ",";  
+  dataString += String("FWversion:"); 
+  dataString += String(FWversion);
   //End of data variables
   dataFile.println(dataString);
   Serial.println(dataString);
