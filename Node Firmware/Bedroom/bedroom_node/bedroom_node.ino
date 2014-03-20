@@ -10,7 +10,7 @@
 #define keypadAnalog              A0 // input from keyPad LCD keypad
 #define loopsPerSecond            84 // used for estimating the timing for occasional updates
 #define tempUpdateDelay           30 // how many seconds (approx) before updating temperature
-#define FWVersion                 0.01
+#define FWVersion                 0.02
 #define setPointMinimum           15.0
 #define setPointMaximum           21.0
 #define tempUpdateLoopInitial     500000
@@ -18,7 +18,7 @@
 
 //Variables
 float setPoint = 18.75;
-float setPointHysterisis = 0.50;
+float setPointHysterisis = 0.20;
 float ambientTemp = -1;
 bool maintainSetPoint = false;
 bool heaterOn = false;
