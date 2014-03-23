@@ -70,7 +70,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.60 // FW version
+#define FWversion                  0.62 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
@@ -302,7 +302,7 @@ void loop()
             server.print(F("Login Failed - Disconnecting"));
             client.stop();
             password.reset();
-            delay(30000); //Wait a short while before allowing any more connections
+            delay(10000); //Wait a short while before allowing any more connections
             timeOfLastInput = millis();//set the time of last Input to NOW
 
         }
@@ -363,7 +363,7 @@ void loop()
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Main Floor Temperature: "));
           server.print(tempAmbient);
-          server.print(F(" `C"));
+          server.print(F(" 'C"));
           server.write(newLine);//new line
           server.write(carriageReturn);
         }
@@ -400,6 +400,24 @@ void loop()
             
         }
 
+
+        if(inputChar == ctrl_setTempSetPoint)
+        {
+            commandSent = true;
+            tempSetPoint = programThermostatSetPoint(-1); //Get a new thermostat set point from telnet connection
+            server.print(F("New main floor set point: "));
+            server.print(tempSetPoint);
+            server.print(F("' C"));
+         
+            if(!maintainTemperature)
+            {
+            server.print(F(" NOTE: Thermostat is NOT enabled"));
+            }
+            server.write(newLine);//new line
+            server.write(carriageReturn);   
+        }
+        
+/*
         if(inputChar == ctrl_increaseTempSetPoint)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -408,7 +426,7 @@ void loop()
             tempSetPoint = tempSetPoint + 0.25;
             server.print(F("Increased temp set point to: "));
             server.print(tempSetPoint);
-            server.print(F(" `C"));
+            server.print(F(" 'C"));
           }
           else
             server.print(F("Maximum Temperature already Set"));
@@ -424,14 +442,14 @@ void loop()
             tempSetPoint = tempSetPoint - 0.25;
             server.print(F("Decreased temp set point to: "));
             server.print(tempSetPoint);
-            server.print(F(" `C"));
+            server.print(F(" 'C"));
           }
           else
             server.print(F("Minimum Temperature Already Reached"));
           server.write(newLine);//new line
           server.write(carriageReturn);
         }
-        
+*/        
         if(inputChar == ctrl_enableBlockHeater)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
@@ -440,7 +458,7 @@ void loop()
           server.print(blockHeaterOnHour);          
           server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
-          server.print(F(" `C"));         
+          server.print(F(" 'C"));         
           server.write(newLine);//new line
           server.write(carriageReturn);         
         }
@@ -658,7 +676,7 @@ void loop()
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Outdoor Temperature is: "));
           server.print(garageTempOutdoor);
-          server.print(F(" `C"));
+          server.print(F(" 'C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -668,7 +686,7 @@ void loop()
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Garage Temperature is: "));
           server.print(garageTempAmbient);
-          server.print(F(" `C"));
+          server.print(F(" 'C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -688,7 +706,7 @@ void loop()
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Basement Temperature is: "));
           server.print(basementTempAmbient);
-          server.print(F(" `C"));
+          server.print(F(" 'C"));
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -934,7 +952,7 @@ void controlFurnace()
         Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
 //        server.print(F("sent ON command to basement node ")); 
 //        server.print(tempAmbient);
-//        server.print(F(" `C ")); 
+//        server.print(F(" 'C ")); 
         if(boolFromSerial1())
           {
 //            server.print(F("ACK"));
@@ -1000,9 +1018,6 @@ void sendCommandList()
           server.print(F("S : Status Report"));
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("T : Program Thermostat Timing"));
-          server.write(newLine);
-          server.write(carriageReturn);
           server.print(F("x : Log off"));
           server.write(carriageReturn);
           server.write(newLine);
@@ -1024,10 +1039,7 @@ void sendCommandList()
           server.print(F("N : Do Not Maintain Temperature       n : Do Not Maintain Temperature"));  
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("O : Increase Set Temperature"));  
-          server.write(newLine);
-          server.write(carriageReturn);
-          server.print(F("P : Decrease Set Temperature"));  
+          server.print(F("I : Set main floor temperature"));  
           server.write(newLine);
           server.write(carriageReturn);
           server.write(newLine);
@@ -1059,31 +1071,31 @@ void sendStatusReport()
       server.write(carriageReturn);
       server.print(F("Main Floor:     "));
       server.print(tempAmbient);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
 
       server.print(F("Bedroom:        "));
       server.print(bedroomTemperature);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
       
       server.print(F("Basement:       "));
       server.print(basementTempAmbient);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
       server.write(newLine);
       server.write(carriageReturn);
 
       server.print(F("Garage:         "));
       server.print(garageTempAmbient);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
       server.write(newLine);
       server.write(carriageReturn);
 
       server.print(F("Outdoor:        "));  
       server.print(garageTempOutdoor);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
       server.write(newLine);
       server.write(carriageReturn);
       server.write(newLine);
@@ -1091,7 +1103,7 @@ void sendStatusReport()
 
       server.print(F("Bedroom Thermostat:  "));
       server.print(bedroomTemperatureSetPoint);
-      server.print(F(" `C"));
+      server.print(F(" 'C"));
   
           
      if(bedroomMaintainTemp)
@@ -1109,7 +1121,7 @@ void sendStatusReport()
           
        server.print(F("Main Thermostat   :  "));
        server.print(tempSetPoint);  
-       server.print(F(" `C"));
+       server.print(F(" 'C"));
 
           
      if(maintainTemperature)
@@ -1133,7 +1145,7 @@ void sendStatusReport()
           server.print(blockHeaterOnHour);          
           server.print(F(":00h if Temperature is below ")); 
           server.print(blockHeaterMaxTemp);
-          server.print(F(" `C in garage"));         
+          server.print(F(" 'C in garage"));         
           server.write(newLine);//new line
           server.write(carriageReturn);     
         }
@@ -1402,13 +1414,13 @@ void automaticTempSetPoint()
 void programThermostat()
 {
 // display opening message to client
-  server.print("Programmable Thermostat Adjustment");
+  server.print(F("Programmable Thermostat Adjustment"));
   server.write(newLine);
   server.write(carriageReturn);
 
 // display currnet program and adjustments to client
   programThermostatDisplaySettings();
-  server.print("Type the letter of the item you wish to change, or type 'x'");
+  server.print(F("Type the letter of the item you wish to change, or type 'x'"));
   server.write(newLine);
   server.write(carriageReturn); 
   
@@ -1529,7 +1541,7 @@ int programThermostatHour(int EEPROMLocation) // get an hour from the telnet cli
     if(EEPROMLocation >= 0 && EEPROMLocation <= 4095)
     {
       EEPROM.write(EEPROMLocation, newHour); //divide it by 10 because it's stored as a single byte value 0-255
-      newHour = EEPROM.read(EEPROMLocation); //Debug line to make sure EEPROM write is accurate
+//      newHour = EEPROM.read(EEPROMLocation); //Debug line to make sure EEPROM write is accurate
     }
     
     return newHour;
@@ -1556,7 +1568,7 @@ int programThermostatMinute(int EEPROMLocation)// get a minute from the telnet c
     if(EEPROMLocation >= 0 && EEPROMLocation <= 4095)
     {
       EEPROM.write(EEPROMLocation, newMinute); //divide it by 10 because it's stored as a single byte value 0-255
-      newMinute = EEPROM.read(EEPROMLocation); //Debugging line to make sure EEPROM store is accurate
+//      newMinute = EEPROM.read(EEPROMLocation); //Debugging line to make sure EEPROM store is accurate
     }
       return newMinute;
   }
@@ -1586,9 +1598,9 @@ float programThermostatSetPoint(int EEPROMLocation) // get a floating point temp
   }
  
  //START OF DEBUGGING CODE
-  newTemperature = EEPROM.read(EEPROMLocation); // restore the value just written into EEPROM and return it 
+ /* newTemperature = EEPROM.read(EEPROMLocation); // restore the value just written into EEPROM and return it 
   newTemperature = newTemperature / 10;
-   
+   */
     return newTemperature;
   }
     
@@ -1645,7 +1657,7 @@ void   programThermostatDisplaySetPoint(float setPointToDisplay)
 
 void   programThermostatDisplaySettings()
 {
-  server.print("Weekday Program");
+  server.print(F("Weekday Program"));
   server.write(newLine);
   server.write(carriageReturn);
   server.print(F("a)"));
@@ -1673,7 +1685,7 @@ void   programThermostatDisplaySettings()
   server.write(carriageReturn);
   
   
-  server.print("Weekend Program");
+  server.print(F("Weekend Program"));
   server.write(newLine);
   server.write(carriageReturn); 
   server.print(F("e)"));
