@@ -70,7 +70,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.62 // FW version
+#define FWversion                  0.63 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
@@ -80,7 +80,7 @@
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
-#define clientTimeoutLimit        90000 //number of seconds before assuming the client has disconnected
+#define clientTimeoutLimit        90000 //number of milliseconds before assuming the client has disconnected
 #define tempHysterisis             0.35 //used for main floor thermostat control
 
 //ASCII values
@@ -179,7 +179,7 @@ bool blockHeaterStatus = 0; //track whether the 120V outlet is on, 1 = on, 0 = o
 //Global variables from the bedroom node
 float bedroomFirmware = -1;
 float bedroomTemperature = -127.0;
-float bedroomTemperatureSetPoint = -127.0;
+float bedroomTemperatureSetPoint = 17.0;
 bool bedroomMaintainTemp = false;
 bool bedroomHeaterStatus = false;
 
@@ -502,6 +502,43 @@ void loop()
            commandSent = true; 
            programThermostat();
         }
+        
+        if(inputChar == ctrl_setBedroomSetPoint)
+        {
+           commandSent = true;
+           bedroomTemperatureSetPoint = programThermostatSetPoint(-1); //Get a new thermostat set point from telnet connection
+            server.print(F("New bedroom set point: "));
+            server.print(tempSetPoint);
+            server.print(F("' C"));
+                    
+            if(!bedroomMaintainTemp)
+            {
+            server.print(F(" NOTE: Bedroom thermostat is NOT enabled"));
+            }
+            server.write(newLine);//new line
+            server.write(carriageReturn);   
+        }
+        
+        if(inputChar == ctrl_enableBedroomHeater)
+        {
+           commandSent = true;
+           bedroomMaintainTemp = true;
+           server.print(F("Maintaining "));
+           server.write(bedroomTemperatureSetPoint);
+           server.print(F(" 'C in bedroom"));
+           server.write(newLine);//new line
+           server.write(carriageReturn);
+        }
+        
+        if(inputChar == ctrl_disableBedroomHeater)
+        {
+           commandSent = true;
+           bedroomMaintainTemp = false;
+           
+           server.print(F("Bedroom heater disabled"));
+           server.write(newLine);//new line
+           server.write(carriageReturn);
+        }
 
 /*
         //Defined commands not handled by this node
@@ -738,84 +775,6 @@ void loop()
           server.write(carriageReturn);
         }
  */       
-        if(inputChar == bdrm_increaseSetPoint)
-        {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial1.print(bdrm_increaseSetPoint);
-          bedroomTemperatureSetPoint = floatFromSerial1('!');
-          server.print(F("Bedroom Set Point Increased to: "));
-          server.print(bedroomTemperatureSetPoint);
-          server.write(newLine);
-          server.write(carriageReturn);
-        }
-        
-        if(inputChar == bdrm_decreaseSetPoint)
-        {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial1.print(bdrm_decreaseSetPoint);
-          bedroomTemperatureSetPoint = floatFromSerial1('!');
-          server.print(F("Bedroom Set Point Decreased to: "));
-          server.print(bedroomTemperatureSetPoint);
-          server.write(newLine);
-          server.write(carriageReturn);
-        }   
-                
-        if(inputChar == bdrm_requestSetPoint)
-        {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial1.print(bdrm_requestSetPoint);
-          bedroomTemperatureSetPoint = floatFromSerial1('!');
-          server.print(F("Bedroom Set Point: "));
-          server.print(bedroomTemperatureSetPoint);
-          server.write(newLine);
-          server.write(carriageReturn);
-        }   
-        
-        if(inputChar == bdrm_maintainSetPoint)
-        {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial1.print(bdrm_maintainSetPoint);
-          bedroomMaintainTemp = boolFromSerial1();
-          if(bedroomMaintainTemp)
-          {
-            server.print(F("Bedroom Thermostat On"));
-           server.print(F(" Until "));
-            server.print(bedroomHeaterAutoOffHour);
-            server.print(F(":00h"));
-            server.write(newLine);
-            server.write(carriageReturn);
-          }
-          else
-          {
-            server.print(F("Error - Command not acknowledged by bedroom node"));
-            server.write(newLine);
-            server.write(carriageReturn);
-          }
-          
-        }
-        
-        if(inputChar == bdrm_dontMaintainSetPoint)
-        {
-          commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          Serial1.print(bdrm_dontMaintainSetPoint);
-          bedroomMaintainTemp = !boolFromSerial1();
-          if(!bedroomMaintainTemp)
-          {
-            server.print(F("Bedroom Thermostat Off"));
-            server.write(newLine);
-            server.write(carriageReturn);
-          }
-          else
-          {
-            server.print(F("Error - Command not acknowledged by bedroom node"));
-            server.write(newLine);
-            server.write(carriageReturn);
-          }
-          
-        }     
-                
-    
-        
 
         //ALL OTHER COMMANDS
         //RELAY THEM TO THE SERIAL PORT (XBEE NETWORK)
@@ -904,8 +863,7 @@ void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off i
     now = rtc.now();
     if(now.hour() == bedroomHeaterAutoOffHour && now.minute() <= 5)
     {
-      Serial1.print(bdrm_dontMaintainSetPoint);
-      bedroomMaintainTemp = !boolFromSerial1();
+      bedroomMaintainTemp = false;
     }
 }
 
@@ -950,6 +908,63 @@ void controlFurnace()
       {
         furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
         Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
+//        server.print(F("sent ON command to basement node ")); 
+//        server.print(tempAmbient);
+//        server.print(F(" 'C ")); 
+        if(boolFromSerial1())
+          {
+//            server.print(F("ACK"));
+//            server.write(carriageReturn);
+//            server.write(newLine);        
+          }
+   
+        else
+          {
+ //           server.print(F("ERROR: Basement node didn't acknowledge furnace on command"));
+ //           server.write(carriageReturn);
+ //           server.write(newLine);        
+          }
+        }
+    return;
+  
+}
+
+
+void controlBedroomHeater()
+{
+  //Make sure tempSetPoint is reasonable. This is a safety feature to prevent house over-heating
+  if(bedroomTemperatureSetPoint < tempMinimumAllowed || bedroomTemperatureSetPoint > tempMaximumAllowed)
+  {
+    Serial.println("ERROR: Bedroom temperature Setpoint of of range!");
+    return;
+  }
+  
+  
+  //Control furnace by sending commands to the bedroom node based on tempAmbient
+
+  if(bedroomTemperature == -127.0 || bedroomTemperature == 0.0)
+  {
+      return;//Don't act on bad values - do nothing
+  }
+      //turn the furnace off if necessary 
+      if(bedroomTemperature > (bedroomTemperatureSetPoint + tempHysterisis))
+      {
+        bedroomHeaterStatus = false;//prevent heater from turning on in the next loop
+        Serial1.print(bsmt_requestDeactivate120V1);   
+        if(!boolFromSerial1())
+        {
+ //         server.print(F("ERROR: Bedroom node didn't acknowledge furnace off command"));
+ //         server.write(carriageReturn);
+ //         server.write(newLine);        
+        }        
+      }  
+      
+      
+      // turn the furnace on if necessary
+      if(bedroomHeaterStatus || (bedroomTemperature < (bedroomTemperatureSetPoint - tempHysterisis)))
+      {
+        bedroomHeaterStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
+        Serial1.print(bsmt_requestActivate120V1);//this command must be repeated at least every 5 minutes or the heater will automatically turn off (see firmware for basement node)
 //        server.print(F("sent ON command to basement node ")); 
 //        server.print(tempAmbient);
 //        server.print(F(" 'C ")); 
@@ -1350,14 +1365,7 @@ void getPeriodicUpdates()
     bedroomTemperature = floatFromSerial1('!');
     Serial1.print(bdrm_requestSetPoint);
     bedroomTemperatureSetPoint = floatFromSerial1('!');
- 
-    //Determine bedroom heater Status
-    if(bedroomMaintainTemp && (bedroomTemperature < (bedroomTemperatureSetPoint - 0.25)))
-       bedroomHeaterStatus = true;
-       
-     else
-       bedroomHeaterStatus = false;
- 
+    
     //Perform time-triggered actions   
     disableBedroomHeaterOnTimer(); //Disable bedroom heater at pre-defined time
     automaticTempSetPoint(); //set the temperature set point based on day and time
@@ -1367,8 +1375,10 @@ void getPeriodicUpdates()
        
     if(blockHeaterEnabled)
           controlBlockHeater();
-          
- 
+    
+    if(bedroomMaintainTemp)
+          controlBedroomHeater();    
+    
     now = rtc.now();//read time from the RTC   
     
     lastUpdateTime = now.unixtime();//update the timer for periodic updates

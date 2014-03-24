@@ -5,27 +5,25 @@
 
 
 //constants
-#define heaterControlRelay        5 //relay to control 300W heater
-#define oneWireBus1                2 // temperature sensor
+#define heaterControlRelay        5 //relay to control heater
+#define oneWireBus1               2 // temperature sensor
 #define keypadAnalog              A0 // input from keyPad LCD keypad
 #define loopsPerSecond            84 // used for estimating the timing for occasional updates
 #define tempUpdateDelay           30 // how many seconds (approx) before updating temperature
-#define FWVersion                 0.02
+#define FWVersion                 0.03
 #define setPointMinimum           15.0
 #define setPointMaximum           21.0
 #define tempUpdateLoopInitial     500000
+#define heaterTimeout             300 //seconds to wait before turning off heater if another command hasn't been received
 
 
 //Variables
-float setPoint = 18.75;
-float setPointHysterisis = 0.20;
 float ambientTemp = -1;
-bool maintainSetPoint = false;
-bool heaterOn = false;
-int  input = 0;
 double tempUpdateLoop = tempUpdateLoopInitial;
 char inputChar;
 unsigned int tempUpdateCountdown = 0;
+long int heaterTimeoutCountdown;
+bool heaterOn = false;
 
   // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire1(oneWireBus1);
@@ -51,8 +49,6 @@ void setup() {
 
 
 void loop() {
-  
-  
     //Periodically update the reading from the temperature sensor
     if(tempUpdateLoop < 1)
     {
@@ -63,20 +59,15 @@ void loop() {
       digitalWrite(13, LOW);
     }
     tempUpdateLoop--;
-    
-    
-    //Control the heater
-    if(maintainSetPoint && (ambientTemp < (setPoint - setPointHysterisis)))
+    if(heaterOn && heaterTimeoutCountdown < 1)
     {
-      if(ambientTemp != 0.0 && ambientTemp != -127.0)//ignore bad values
-        digitalWrite(heaterControlRelay, LOW);//Turn heater ON
+      digitalWrite(heaterControlRelay, HIGH); // active low output
+      heaterOn = false;
     }
-    
-    if(!maintainSetPoint || (ambientTemp > (setPoint + setPointHysterisis)))
+    if(heaterOn)
     {
-       digitalWrite(heaterControlRelay, HIGH);//Turn heater OFF
+      heaterTimeoutCountdown--;
     }
-    
     
     
     //Check for and respond to serial input commands from the controller
@@ -90,46 +81,28 @@ void loop() {
         Serial.print("!");
   
       }
+      
       else if(inputChar == bdrm_requestTemp)
       {
         Serial.print("MT");
         Serial.print(ambientTemp);
         Serial.print("!");
       }
-      else if(inputChar == bdrm_increaseSetPoint)
+      
+      else if(inputChar == bdrm_requestActivate120V1)
       {
-        if(setPoint < setPointMaximum)
-           setPoint += 0.25;
-   
-        Serial.print("Ms");
-        Serial.print(setPoint);
-        Serial.print("!");
+        heaterTimeoutCountdown = heaterTimeout * loopsPerSecond;
+        digitalWrite(heaterControlRelay, LOW);//Turn on heater (active low)
+        heaterOn = true;
+        Serial.print("MS1");
       }
-      else if(inputChar == bdrm_decreaseSetPoint)
+      
+      else if(inputChar == bdrm_requestDeactivate120V1)
       {
-        if(setPoint > setPointMinimum)
-          setPoint -= 0.25;
-  
-        Serial.print("Ms");
-        Serial.print(setPoint);
-        Serial.print("!");        
+        digitalWrite(heaterControlRelay, HIGH);//Turn off heater (active low)
+        heaterOn = false;
+        Serial.print("Ms1");
       }
-      else if(inputChar == bdrm_requestSetPoint)
-      {
-        Serial.print("Ms");
-        Serial.print(setPoint);
-        Serial.print("!");    
-      }
-      else if(inputChar == bdrm_maintainSetPoint)
-      {
-        maintainSetPoint = true;
-        Serial.print("MH1");
-      }
-      else if(inputChar == bdrm_dontMaintainSetPoint)
-      {
-        maintainSetPoint = false;
-        Serial.print("Mh1");
-      }  
     }
 }
 
