@@ -1,0 +1,25 @@
+// Thermostat value locations in EEPROM
+#define EEPROM_thermostatWeekdayTimePeriod1HourStart 			0
+#define EEPROM_thermostatWeekdayTimePeriod1MinuteStart			1
+#define EEPROM_thermostatWeekdayTimePeriod1SetPoint				2
+#define EEPROM_thermostatWeekdayTimePeriod2HourStart			3
+#define EEPROM_thermostatWeekdayTimePeriod2MinuteStart			4
+#define EEPROM_thermostatWeekdayTimePeriod2SetPoint				5
+#define EEPROM_thermostatWeekdayTimePeriod3HourStart			6
+#define EEPROM_thermostatWeekdayTimePeriod3MinuteStart			7
+#define EEPROM_thermostatWeekdayTimePeriod3SetPoint				8
+#define EEPROM_thermostatWeekdayTimePeriod4HourStart			9
+#define EEPROM_thermostatWeekdayTimePeriod4MinuteStart		   10
+#define EEPROM_thermostatWeekdayTimePeriod4SetPoint		       11
+#define EEPROM_thermostatWeekendTimePeriod1HourStart		   12
+#define EEPROM_thermostatWeekendTimePeriod1MinuteStart		   13
+#define EEPROM_thermostatWeekendTimePeriod1SetPoint			   14
+#define EEPROM_thermostatWeekendTimePeriod2HourStart		   15
+#define EEPROM_thermostatWeekendTimePeriod2MinuteStart		   16
+#define EEPROM_thermostatWeekendTimePeriod2SetPoint			   17
+#define EEPROM_thermostatWeekendTimePeriod3HourStart		   18
+#define EEPROM_thermostatWeekendTimePeriod3MinuteStart         19
+#define EEPROM_thermostatWeekendTimePeriod3SetPoint            20
+#define EEPROM_thermostatWeekendTimePeriod4HourStart           21
+#define EEPROM_thermostatWeekendTimePeriod4MinuteStart         22
+#define EEPROM_thermostatWeekendTimePeriod4SetPoint            23

@@ -70,10 +70,10 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.63 // FW version
+#define FWversion                  0.64 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
-#define bedroomHeaterAutoOffHour     10 //automatically turn off the bedroom heater at this time
+#define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
 #define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
 #define blockHeaterOffHour            9 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
@@ -127,6 +127,7 @@ float tempSetPoint = 21.0; //The setPoint temperature
 //float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
 bool maintainTemperature; //Furnace ON/Off commands are only sent if this is true
 bool furnaceStatus = false; //This is true if Furnace ON commands are being sent
+bool programmableThermostatEnabled = true; // Allows user to disable programmable thermostat to force constant temperature
 bool blockHeaterEnabled = false; //If this is true, blockheater automatically turns on and off with temperature and time
 bool validPassword = false; //This is true any time a valid user is logged in
 bool commandSent = false; //this tracks whether the controller has already relayed the command to the network, prevents sending it twice
@@ -134,32 +135,24 @@ bool SDCardLog = false; //We only attempt to write to the SD card if this is tru
 unsigned long timeOfLastInput = 0;//this is used to determine if the client interaction has timed out
 
 //Variables for Automatic Thermostat [weekdays]
-int thermostatWeekdayTimePeriod1HourStart;
-int thermostatWeekdayTimePeriod1MinuteStart; //system on-time in the morning
+int thermostatWeekdayTimePeriod1msmStart; //system on time in the morning
 float thermostatWeekdayTimePeriod1SetPoint;
-int thermostatWeekdayTimePeriod2HourStart;
-int thermostatWeekdayTimePeriod2MinuteStart; //reduce temperature when leaving for work
+int thermostatWeekdayTimePeriod2msmStart; //reduce temperature when leaving for work
 float thermostatWeekdayTimePeriod2SetPoint;
-int thermostatWeekdayTimePeriod3HourStart;
-int thermostatWeekdayTimePeriod3MinuteStart; //heat up before we get home from work
+int thermostatWeekdayTimePeriod3msmStart; //heat up before we get home from work
 float thermostatWeekdayTimePeriod3SetPoint;
-int thermostatWeekdayTimePeriod4HourStart;
-int thermostatWeekdayTimePeriod4MinuteStart; //turn down when going to bed
+int thermostatWeekdayTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekdayTimePeriod4SetPoint;
 
 
 //Variables for the automatic Thermostat [weekends]
-int thermostatWeekendTimePeriod1HourStart;
-int thermostatWeekendTimePeriod1MinuteStart; //system on-time in the morning
+int thermostatWeekendTimePeriod1msmStart; //system on-time in the morning
 float thermostatWeekendTimePeriod1SetPoint;
-int thermostatWeekendTimePeriod2HourStart;
-int thermostatWeekendTimePeriod2MinuteStart; //reduce temperature when leaving 
+int thermostatWeekendTimePeriod2msmStart; //reduce temperature when leaving 
 float thermostatWeekendTimePeriod2SetPoint;
-int thermostatWeekendTimePeriod3HourStart;
-int thermostatWeekendTimePeriod3MinuteStart; //heat up before we get home 
+int thermostatWeekendTimePeriod3msmStart; //heat up before we get home 
 float thermostatWeekendTimePeriod3SetPoint;
-int thermostatWeekendTimePeriod4HourStart;
-int thermostatWeekendTimePeriod4MinuteStart; //turn down when going to bed
+int thermostatWeekendTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekendTimePeriod4SetPoint;
 
 
@@ -218,7 +211,10 @@ void setup()
   //initialize the serioal ports 
   Serial.begin(9600); //diagnostic output port
   Serial1.begin(9600); //XBEE network port
-
+  
+  //Restore settings from EEPROM
+  programThermostatRestoreFromEEPROM();
+  
   //get the initial periodic update values
   getPeriodicUpdates();
   
@@ -227,11 +223,8 @@ void setup()
   garageTempOutdoor = floatFromSerial1('!');  
   
   lastLogMinute = now.minute() - 1; // initialize the last logged time so that the logging function will always save on the first call
-  saveToSDCard();
-  
-  //Restore settings from EEPROM
-  programThermostatRestoreFromEEPROM();
-  
+  saveToSDCard();  
+
     //Initialize the Ethernet Adapter
   byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
   byte ip[] = { 192, 168, 1, 230 };   // IP Address
@@ -414,7 +407,13 @@ void loop()
             server.print(F(" NOTE: Thermostat is NOT enabled"));
             }
             server.write(newLine);//new line
-            server.write(carriageReturn);   
+            server.write(carriageReturn); 
+          
+            if(programmableThermostatEnabled)//diable the thermostat schedule if required
+            {
+            commandSent = false;
+            inputChar = ctrl_toggleThermostatSchedule;
+            }  
         }
         
 /*
@@ -508,7 +507,7 @@ void loop()
            commandSent = true;
            bedroomTemperatureSetPoint = programThermostatSetPoint(-1); //Get a new thermostat set point from telnet connection
             server.print(F("New bedroom set point: "));
-            server.print(tempSetPoint);
+            server.print(bedroomTemperatureSetPoint);
             server.print(F("' C"));
                     
             if(!bedroomMaintainTemp)
@@ -524,8 +523,10 @@ void loop()
            commandSent = true;
            bedroomMaintainTemp = true;
            server.print(F("Maintaining "));
-           server.write(bedroomTemperatureSetPoint);
-           server.print(F(" 'C in bedroom"));
+           server.print(bedroomTemperatureSetPoint);
+           server.print(F(" 'C in bedroom until"));
+           server.print(bedroomHeaterAutoOffHour);
+           server.print(F(":00am"));
            server.write(newLine);//new line
            server.write(carriageReturn);
         }
@@ -534,10 +535,28 @@ void loop()
         {
            commandSent = true;
            bedroomMaintainTemp = false;
+           bedroomHeaterStatus = false;
+           Serial1.print(bdrm_requestDeactivate120V1);
            
            server.print(F("Bedroom heater disabled"));
            server.write(newLine);//new line
            server.write(carriageReturn);
+        }
+        
+        if(inputChar == ctrl_toggleThermostatSchedule)
+        {
+         commandSent = true;
+         programmableThermostatEnabled = !programmableThermostatEnabled;
+         server.print(F("Programmable Thermostat Schedule is "));
+         if(programmableThermostatEnabled)
+         server.print(F("En"));
+         else
+         server.print(F("Dis"));
+
+         server.print(F("abled"));
+         server.write(newLine);//new line
+         server.write(carriageReturn); 
+         
         }
 
 /*
@@ -950,7 +969,10 @@ void controlBedroomHeater()
       if(bedroomTemperature > (bedroomTemperatureSetPoint + tempHysterisis))
       {
         bedroomHeaterStatus = false;//prevent heater from turning on in the next loop
-        Serial1.print(bsmt_requestDeactivate120V1);   
+        Serial1.print(bdrm_requestDeactivate120V1);   
+        Serial.println("Bedroom heater turned off");
+        Serial.print("Sent ");
+        Serial.println(bdrm_requestDeactivate120V1);        
         if(!boolFromSerial1())
         {
  //         server.print(F("ERROR: Bedroom node didn't acknowledge furnace off command"));
@@ -964,8 +986,11 @@ void controlBedroomHeater()
       if(bedroomHeaterStatus || (bedroomTemperature < (bedroomTemperatureSetPoint - tempHysterisis)))
       {
         bedroomHeaterStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
-        Serial1.print(bsmt_requestActivate120V1);//this command must be repeated at least every 5 minutes or the heater will automatically turn off (see firmware for basement node)
-//        server.print(F("sent ON command to basement node ")); 
+        Serial1.print(bdrm_requestActivate120V1);//this command must be repeated at least every 5 minutes or the heater will automatically turn off (see firmware for basement node)
+        Serial.println("Bedroom heater turned ON");
+        Serial.print("Sent ");
+        Serial.println(bdrm_requestActivate120V1);
+//        server.print(F("sent ON command to bedroom node ")); 
 //        server.print(tempAmbient);
 //        server.print(F(" 'C ")); 
         if(boolFromSerial1())
@@ -977,7 +1002,7 @@ void controlBedroomHeater()
    
         else
           {
- //           server.print(F("ERROR: Basement node didn't acknowledge furnace on command"));
+ //           server.print(F("ERROR: Bedroom node didn't acknowledge furnace on command"));
  //           server.write(carriageReturn);
  //           server.write(newLine);        
           }
@@ -1042,19 +1067,25 @@ void sendCommandList()
           server.print(F("MAIN FLOOR:                           MASTER BEDROOM:"));
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("E : Turn Fan On                       k : Increase Set Temperature"));   
+          server.print(F("E : Turn Fan On                       B : Set Temperature"));   
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("F : Turn Fan and Furnace Off          l : Decrease Set Temperature"));   
+          server.print(F("F : Turn Fan and Furnace Off          m : Maintain Temperature"));   
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("M : Maintain Set Temperature          m : Maintain Temperature"));  
+          server.print(F("M : Maintain Set Temperature          n : Do Not Maintain Temperature"));  
           server.write(newLine);
           server.write(carriageReturn);
-          server.print(F("N : Do Not Maintain Temperature       n : Do Not Maintain Temperature"));  
+          server.print(F("N : Do Not Maintain Temperature"));  
           server.write(newLine);
           server.write(carriageReturn);
           server.print(F("I : Set main floor temperature"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("T : Program Thermostat Schedule"));  
+          server.write(newLine);
+          server.write(carriageReturn);
+          server.print(F("t : Enabled/Disable Schedule"));  
           server.write(newLine);
           server.write(carriageReturn);
           server.write(newLine);
@@ -1081,7 +1112,7 @@ void sendCommandList()
 
 void sendStatusReport()
 {
-      server.print(F("Temperatures"));
+      server.print(F("TEMPERATURES"));
       server.write(newLine);//new line
       server.write(carriageReturn);
       server.print(F("Main Floor:     "));
@@ -1116,6 +1147,10 @@ void sendStatusReport()
       server.write(newLine);
       server.write(carriageReturn); 
 
+
+      server.print(F("SETTINGS"));
+      server.write(newLine);
+      server.write(carriageReturn);
       server.print(F("Bedroom Thermostat:  "));
       server.print(bedroomTemperatureSetPoint);
       server.print(F(" 'C"));
@@ -1172,11 +1207,25 @@ void sendStatusReport()
          server.write(carriageReturn);     
         }
         
-        server.write(newLine);
-        server.write(carriageReturn);   
   
+  
+         server.print(F("Programmable Thermostat Schedule is "));
+         if(programmableThermostatEnabled)
+         server.print(F("En"));
+         else
+         server.print(F("Dis"));
 
-        
+         server.print(F("abled"));
+         server.write(newLine);//new line
+         server.write(carriageReturn); 
+         server.write(newLine);
+         server.write(carriageReturn); 
+   
+   
+         server.print(F("STATUS"));
+           server.write(newLine);
+          server.write(carriageReturn);
+          
         server.print(F("Furnace is "));
         
         if(furnaceStatus)
@@ -1363,8 +1412,6 @@ void getPeriodicUpdates()
     //Get updates from the bedroom node
     Serial1.print(bdrm_requestTemp);
     bedroomTemperature = floatFromSerial1('!');
-    Serial1.print(bdrm_requestSetPoint);
-    bedroomTemperatureSetPoint = floatFromSerial1('!');
     
     //Perform time-triggered actions   
     disableBedroomHeaterOnTimer(); //Disable bedroom heater at pre-defined time
@@ -1387,35 +1434,43 @@ void getPeriodicUpdates()
 
 void automaticTempSetPoint()
 {
+  if(!programmableThermostatEnabled) // don't change the set point if the programmable thermostat is disabled
+  {
+    return;
+  }
+  
   now = rtc.now();//update the time from the RTC
+  int nowMsm = minutesSinceMidnight(now.hour(), now.minute());
 
   if(now.dayOfWeek() > 0 && now.dayOfWeek() < 6) // Monday = 1, Friday = 5
   {
 
-  if(now.hour() == thermostatWeekdayTimePeriod1HourStart && now.minute() == thermostatWeekdayTimePeriod1MinuteStart)
+   if(nowMsm >= thermostatWeekdayTimePeriod1msmStart && nowMsm < thermostatWeekdayTimePeriod2msmStart)
     tempSetPoint = thermostatWeekdayTimePeriod1SetPoint;
     
-  if(now.hour() == thermostatWeekdayTimePeriod2HourStart && now.minute() == thermostatWeekdayTimePeriod2MinuteStart)
+   if(nowMsm >= thermostatWeekdayTimePeriod2msmStart && nowMsm < thermostatWeekdayTimePeriod3msmStart)
      tempSetPoint = thermostatWeekdayTimePeriod2SetPoint;
 
-  if(now.hour() == thermostatWeekdayTimePeriod3HourStart && now.minute() == thermostatWeekdayTimePeriod3MinuteStart)
+   if(nowMsm >= thermostatWeekdayTimePeriod3msmStart && nowMsm < thermostatWeekdayTimePeriod4msmStart)
      tempSetPoint = thermostatWeekdayTimePeriod3SetPoint;
 
-  if(now.hour() == thermostatWeekdayTimePeriod4HourStart && now.minute() == thermostatWeekdayTimePeriod4MinuteStart)
+   if(nowMsm >= thermostatWeekdayTimePeriod4msmStart)
      tempSetPoint = thermostatWeekdayTimePeriod4SetPoint;
+     
+
   }
   if(now.dayOfWeek() == 0 || now.dayOfWeek() == 6) //sunday = 0, saturday = 6
   {
-  if(now.hour() == thermostatWeekendTimePeriod1HourStart && now.minute() == thermostatWeekendTimePeriod1MinuteStart)
+   if(nowMsm >= thermostatWeekendTimePeriod1msmStart && nowMsm < thermostatWeekendTimePeriod2msmStart)
     tempSetPoint = thermostatWeekendTimePeriod1SetPoint;
     
-  if(now.hour() == thermostatWeekendTimePeriod2HourStart && now.minute() == thermostatWeekendTimePeriod2MinuteStart)
+   if(nowMsm >= thermostatWeekendTimePeriod2msmStart && nowMsm < thermostatWeekendTimePeriod3msmStart)
      tempSetPoint = thermostatWeekendTimePeriod2SetPoint;
 
-  if(now.hour() == thermostatWeekendTimePeriod3HourStart && now.minute() == thermostatWeekendTimePeriod3MinuteStart)
+   if(nowMsm >= thermostatWeekendTimePeriod3msmStart && nowMsm < thermostatWeekendTimePeriod4msmStart)
      tempSetPoint = thermostatWeekendTimePeriod3SetPoint;
 
-  if(now.hour() == thermostatWeekendTimePeriod4HourStart && now.minute() == thermostatWeekendTimePeriod4MinuteStart)
+   if(nowMsm >= thermostatWeekendTimePeriod4msmStart)
      tempSetPoint = thermostatWeekendTimePeriod4SetPoint;       
   }
   return;
@@ -1473,59 +1528,51 @@ void programThermostat()
           return;
           break;
           case 'a': //change weekday period 1
-          thermostatWeekdayTimePeriod1HourStart = programThermostatHour(EEPROM_thermostatWeekdayTimePeriod1HourStart);
-          thermostatWeekdayTimePeriod1MinuteStart = programThermostatMinute(EEPROM_thermostatWeekdayTimePeriod1MinuteStart);
+          thermostatWeekdayTimePeriod1msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod1HourStart, EEPROM_thermostatWeekdayTimePeriod1MinuteStart);
           thermostatWeekdayTimePeriod1SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
             programThermostatDisplaySettings();
 
           break;
           
           case 'b': //change weekday period 2
-          thermostatWeekdayTimePeriod2HourStart = programThermostatHour(EEPROM_thermostatWeekdayTimePeriod2HourStart);
-          thermostatWeekdayTimePeriod2MinuteStart = programThermostatMinute(EEPROM_thermostatWeekdayTimePeriod2MinuteStart);
+          thermostatWeekdayTimePeriod2msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod2HourStart, EEPROM_thermostatWeekdayTimePeriod2MinuteStart);
           thermostatWeekdayTimePeriod2SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod2SetPoint);
             programThermostatDisplaySettings();
 
           break;
           
           case 'c': //change weekday period 3
-          thermostatWeekdayTimePeriod3HourStart = programThermostatHour(EEPROM_thermostatWeekdayTimePeriod3HourStart);
-          thermostatWeekdayTimePeriod3MinuteStart = programThermostatMinute(EEPROM_thermostatWeekdayTimePeriod3MinuteStart);
+          thermostatWeekdayTimePeriod3msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod3HourStart, EEPROM_thermostatWeekdayTimePeriod3MinuteStart);
           thermostatWeekdayTimePeriod3SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod3SetPoint);
             programThermostatDisplaySettings();
           break;
           
           case 'd': //change weekday period 4
-          thermostatWeekdayTimePeriod4HourStart = programThermostatHour(EEPROM_thermostatWeekdayTimePeriod4HourStart);
-          thermostatWeekdayTimePeriod4MinuteStart = programThermostatMinute(EEPROM_thermostatWeekdayTimePeriod4MinuteStart);
+          thermostatWeekdayTimePeriod4msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod4HourStart, EEPROM_thermostatWeekdayTimePeriod4MinuteStart);
           thermostatWeekdayTimePeriod4SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod4SetPoint);  
           programThermostatDisplaySettings();
           break;     
      
           case 'e': //change weekend period 1
-          thermostatWeekendTimePeriod1HourStart = programThermostatHour(EEPROM_thermostatWeekendTimePeriod1HourStart);
-          thermostatWeekendTimePeriod1MinuteStart = programThermostatMinute(EEPROM_thermostatWeekendTimePeriod1MinuteStart);
+          thermostatWeekendTimePeriod1msmStart = programThermostatmsm(EEPROM_thermostatWeekendTimePeriod1HourStart, EEPROM_thermostatWeekendTimePeriod1MinuteStart);
           thermostatWeekendTimePeriod1SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekendTimePeriod1SetPoint);
             programThermostatDisplaySettings();
           break; 
           
           case 'f': //change weekend period 2
-          thermostatWeekendTimePeriod2HourStart = programThermostatHour(EEPROM_thermostatWeekendTimePeriod2HourStart);
-          thermostatWeekendTimePeriod2MinuteStart = programThermostatMinute(EEPROM_thermostatWeekendTimePeriod2MinuteStart);
+          thermostatWeekendTimePeriod2msmStart = programThermostatmsm(EEPROM_thermostatWeekendTimePeriod2HourStart, EEPROM_thermostatWeekendTimePeriod2MinuteStart);
           thermostatWeekendTimePeriod2SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekendTimePeriod2SetPoint);
             programThermostatDisplaySettings();
           break;
           
           case 'g': //change weekend period 3
-          thermostatWeekendTimePeriod3HourStart = programThermostatHour(EEPROM_thermostatWeekendTimePeriod3HourStart);
-          thermostatWeekendTimePeriod3MinuteStart = programThermostatMinute(EEPROM_thermostatWeekendTimePeriod3MinuteStart);
+          thermostatWeekendTimePeriod3msmStart = programThermostatmsm(EEPROM_thermostatWeekendTimePeriod3HourStart, EEPROM_thermostatWeekendTimePeriod3MinuteStart);
           thermostatWeekendTimePeriod3SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekendTimePeriod3SetPoint);
             programThermostatDisplaySettings();
           break;
           
           case 'h': //change weekend period 4
-          thermostatWeekendTimePeriod4HourStart = programThermostatHour(EEPROM_thermostatWeekendTimePeriod4HourStart);
-          thermostatWeekendTimePeriod4MinuteStart = programThermostatMinute(EEPROM_thermostatWeekendTimePeriod4MinuteStart);
+          thermostatWeekendTimePeriod4msmStart = programThermostatmsm(EEPROM_thermostatWeekendTimePeriod4HourStart, EEPROM_thermostatWeekendTimePeriod4MinuteStart);
           thermostatWeekendTimePeriod4SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekendTimePeriod4SetPoint);
             programThermostatDisplaySettings();
           break;             
@@ -1620,9 +1667,59 @@ float programThermostatSetPoint(int EEPROMLocation) // get a floating point temp
   server.print(tempMaximumAllowed);
   server.print(F(" deg C, try again: "));
 }
-
-
 }
+
+int programThermostatmsm(int EEPROMLocation_hour, int EEPROMLocation_minute) // get an hour from the telnet client and return it as an integer
+{
+  int newHour = -1;
+  int newMinute = -1;
+
+  flushTelnet(); //clear any inputs from the telnet client
+
+  while(newHour < 0 || newHour > 23)
+  {
+    server.print(F("Enter new hour: "));
+    newHour = intFromTelnet(carriageReturn);
+  
+    //VALIDATE DATA
+    if(newHour >= 0 && newHour <= 23)
+    {
+        //store the setpoint in EEPROM
+      if(EEPROMLocation_hour >= 0 && EEPROMLocation_hour <= 4095)
+      {
+        EEPROM.write(EEPROMLocation_hour, newHour); //divide it by 10 because it's stored as a single byte value 0-255
+      }    
+      break;
+    }
+    
+    server.print(F("Valid entry is 0 - 23, try again: "));
+  }
+  
+  while(newMinute < 0 || newMinute > 23)
+  {
+    server.print(F("Enter new minute: "));
+    newMinute = intFromTelnet(carriageReturn);
+  
+    //VALIDATE DATA
+    if(newMinute >= 0 && newMinute <= 59)
+    {
+          //store the setpoint in EEPROM
+      if(EEPROMLocation_minute >= 0 && EEPROMLocation_minute <= 4095)
+      {
+        EEPROM.write(EEPROMLocation_minute, newMinute); //divide it by 10 because it's stored as a single byte value 0-255
+  //      newMinute = EEPROM.read(EEPROMLocation); //Debugging line to make sure EEPROM store is accurate
+      }
+        break;
+    }
+ 
+  
+  server.print(F("Valid entry is 0 - 59, try again: "));
+    
+}
+  return minutesSinceMidnight(newHour, newMinute);
+}
+
+
 
 void   programThermostatDisplayLine(int periodNumber)
 {
@@ -1672,24 +1769,24 @@ void   programThermostatDisplaySettings()
   server.write(carriageReturn);
   server.print(F("a)"));
   programThermostatDisplayLine(1);
-  programThermostatDisplayHour(thermostatWeekdayTimePeriod1HourStart);
-  programThermostatDisplayMinute(thermostatWeekdayTimePeriod1MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekdayTimePeriod1msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekdayTimePeriod1msmStart));
   programThermostatDisplaySetPoint(thermostatWeekdayTimePeriod1SetPoint);
   server.print(F("b)"));
   programThermostatDisplayLine(2);
-  programThermostatDisplayHour(thermostatWeekdayTimePeriod2HourStart);
-  programThermostatDisplayMinute(thermostatWeekdayTimePeriod2MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekdayTimePeriod2msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekdayTimePeriod2msmStart));
   programThermostatDisplaySetPoint(thermostatWeekdayTimePeriod2SetPoint);  
   server.print(F("c)"));
   programThermostatDisplayLine(3);
-  programThermostatDisplayHour(thermostatWeekdayTimePeriod3HourStart);
-  programThermostatDisplayMinute(thermostatWeekdayTimePeriod3MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekdayTimePeriod3msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekdayTimePeriod3msmStart));
   programThermostatDisplaySetPoint(thermostatWeekdayTimePeriod3SetPoint);  
 
   server.print(F("d)"));  
   programThermostatDisplayLine(4);
-  programThermostatDisplayHour(thermostatWeekdayTimePeriod4HourStart);
-  programThermostatDisplayMinute(thermostatWeekdayTimePeriod4MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekdayTimePeriod4msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekdayTimePeriod4msmStart));
   programThermostatDisplaySetPoint(thermostatWeekdayTimePeriod4SetPoint);  
   server.write(newLine);
   server.write(carriageReturn);
@@ -1700,24 +1797,24 @@ void   programThermostatDisplaySettings()
   server.write(carriageReturn); 
   server.print(F("e)"));
   programThermostatDisplayLine(1);
-  programThermostatDisplayHour(thermostatWeekendTimePeriod1HourStart);
-  programThermostatDisplayMinute(thermostatWeekendTimePeriod1MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekendTimePeriod1msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekendTimePeriod1msmStart));
   programThermostatDisplaySetPoint(thermostatWeekendTimePeriod1SetPoint);
   server.print(F("f)"));
   programThermostatDisplayLine(2);
-  programThermostatDisplayHour(thermostatWeekendTimePeriod2HourStart);
-  programThermostatDisplayMinute(thermostatWeekendTimePeriod2MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekendTimePeriod2msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekendTimePeriod2msmStart));
   programThermostatDisplaySetPoint(thermostatWeekendTimePeriod2SetPoint);  
   server.print(F("g)"));
   programThermostatDisplayLine(3);
-  programThermostatDisplayHour(thermostatWeekendTimePeriod3HourStart);
-  programThermostatDisplayMinute(thermostatWeekendTimePeriod3MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekendTimePeriod3msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekendTimePeriod3msmStart));
   programThermostatDisplaySetPoint(thermostatWeekendTimePeriod3SetPoint);  
 
   server.print(F("h)"));  
   programThermostatDisplayLine(4);
-  programThermostatDisplayHour(thermostatWeekendTimePeriod4HourStart);
-  programThermostatDisplayMinute(thermostatWeekendTimePeriod4MinuteStart);
+  programThermostatDisplayHour(hoursFrommsm(thermostatWeekendTimePeriod4msmStart));
+  programThermostatDisplayMinute(minutesFrommsm(thermostatWeekendTimePeriod4msmStart));
   programThermostatDisplaySetPoint(thermostatWeekendTimePeriod4SetPoint);  
   server.write(newLine);
   server.write(carriageReturn);
@@ -1731,43 +1828,35 @@ void programThermostatRestoreFromEEPROM()
   //make sure that the EEPROM doesn't have any blank values in the range where the
   //thermostat settings should be stored
   
-  thermostatWeekdayTimePeriod1HourStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
-  thermostatWeekdayTimePeriod1MinuteStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1MinuteStart);
+  thermostatWeekdayTimePeriod1msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1MinuteStart));
   thermostatWeekdayTimePeriod1SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
   thermostatWeekdayTimePeriod1SetPoint = thermostatWeekdayTimePeriod1SetPoint / 10;
   
-  thermostatWeekdayTimePeriod2HourStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod2HourStart);
-  thermostatWeekdayTimePeriod2MinuteStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod2MinuteStart);
+  thermostatWeekdayTimePeriod2msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod2HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod2MinuteStart));
   thermostatWeekdayTimePeriod2SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod2SetPoint);
   thermostatWeekdayTimePeriod2SetPoint = thermostatWeekdayTimePeriod2SetPoint / 10;
   
-  thermostatWeekdayTimePeriod3HourStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod3HourStart);
-  thermostatWeekdayTimePeriod3MinuteStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod3MinuteStart);
+  thermostatWeekdayTimePeriod3msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod3HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod3MinuteStart));
   thermostatWeekdayTimePeriod3SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod3SetPoint);
   thermostatWeekdayTimePeriod3SetPoint = thermostatWeekdayTimePeriod3SetPoint / 10;
   
-  thermostatWeekdayTimePeriod4HourStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod4HourStart);
-  thermostatWeekdayTimePeriod4MinuteStart = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod4MinuteStart);
+  thermostatWeekdayTimePeriod4msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod4HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod4MinuteStart));
   thermostatWeekdayTimePeriod4SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod4SetPoint);
   thermostatWeekdayTimePeriod4SetPoint = thermostatWeekdayTimePeriod4SetPoint / 10;
   
-  thermostatWeekendTimePeriod1HourStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod1HourStart);
-  thermostatWeekendTimePeriod1MinuteStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod1MinuteStart);
+  thermostatWeekendTimePeriod1msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekendTimePeriod1HourStart), EEPROM.read(EEPROM_thermostatWeekendTimePeriod1MinuteStart));
   thermostatWeekendTimePeriod1SetPoint = EEPROM.read(EEPROM_thermostatWeekendTimePeriod1SetPoint);
   thermostatWeekendTimePeriod1SetPoint = thermostatWeekendTimePeriod1SetPoint / 10;
   
-  thermostatWeekendTimePeriod2HourStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod2HourStart);
-  thermostatWeekendTimePeriod2MinuteStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod2MinuteStart);
+  thermostatWeekendTimePeriod2msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekendTimePeriod2HourStart), EEPROM.read(EEPROM_thermostatWeekendTimePeriod2MinuteStart));
   thermostatWeekendTimePeriod2SetPoint = EEPROM.read(EEPROM_thermostatWeekendTimePeriod2SetPoint);
   thermostatWeekendTimePeriod2SetPoint = thermostatWeekendTimePeriod2SetPoint / 10;
   
-  thermostatWeekendTimePeriod3HourStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod3HourStart);
-  thermostatWeekendTimePeriod3MinuteStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod3MinuteStart);
+  thermostatWeekendTimePeriod3msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekendTimePeriod3HourStart), EEPROM.read(EEPROM_thermostatWeekendTimePeriod3MinuteStart));
   thermostatWeekendTimePeriod3SetPoint = EEPROM.read(EEPROM_thermostatWeekendTimePeriod3SetPoint);
   thermostatWeekendTimePeriod3SetPoint = thermostatWeekendTimePeriod3SetPoint / 10;
   
-  thermostatWeekendTimePeriod4HourStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod4HourStart);
-  thermostatWeekendTimePeriod4MinuteStart = EEPROM.read(EEPROM_thermostatWeekendTimePeriod4MinuteStart);
+  thermostatWeekendTimePeriod4msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekendTimePeriod4HourStart), EEPROM.read(EEPROM_thermostatWeekendTimePeriod4MinuteStart));
   thermostatWeekendTimePeriod4SetPoint = EEPROM.read(EEPROM_thermostatWeekendTimePeriod4SetPoint);
   thermostatWeekendTimePeriod4SetPoint = thermostatWeekendTimePeriod4SetPoint / 10;
   
@@ -2064,5 +2153,23 @@ void flushTelnet()
       inputChar = client.read();// read in the data but don't do anything with it.
       timeOfLastInput = millis();//set the time of last Input to NOW
     }
+}
+
+int minutesSinceMidnight(int hours, int minutes)
+{
+ int msm;
+ msm = minutes;
+ msm += (hours * 60);
+ return msm;
+}
+
+int hoursFrommsm(int msm)
+{
+ return msm / 60; 
+}
+
+int minutesFrommsm(int msm)
+{
+ return msm % 60; 
 }
 
