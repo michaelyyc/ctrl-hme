@@ -10,6 +10,7 @@
   	#define ctrl_statusReport			   83 //S
     #define ctrl_disableBlockHeater   	 'R' //R
     #define ctrl_listCommands              '?' // ?
+    #define ctrl_programmableThermostat    'T' //T
 
 
 //BASEMENT COMMANDS

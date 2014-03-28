@@ -3,13 +3,18 @@
   #define ctrl_requestTemp               'L' //L
   #define ctrl_enableFurnace             'M' //M
   #define ctrl_disableFurnace            'N' //N
-  #define ctrl_increaseTempSetPoint      'O' //O
-  #define ctrl_decreaseTempSetPoint      'P' //P
+  #define ctrl_setTempSetPoint			 'I' //I
   #define ctrl_listCommands              '?' // ?
   #define ctrl_logOff                    'x' // x
   #define ctrl_statusReport				 'S' //S
   #define ctrl_enableBlockHeater	     'Q' //Q
   #define ctrl_disableBlockHeater   	 'R' //R
+  #define ctrl_programmableThermostat    'T' //T
+  #define ctrl_setBedroomSetPoint        'B' //B
+  #define ctrl_enableBedroomHeater       'm' //m
+  #define ctrl_disableBedroomHeater      'n' //n
+  #define ctrl_toggleThermostatSchedule  't' //t
+
 
 //BASEMENT COMMANDS
 //Commands from the controller
@@ -24,7 +29,7 @@
   #define bsmt_requestHumidity         'H' //H
   #define bsmt_requestMoistureStatus   'I' //I
   #define bsmt_requestCPUTemp          'J' //J
-  
+
   
 //GARAGE COMMANDS
 //Commands from the controller
@@ -50,8 +55,5 @@
   
   #define bdrm_requestFWVer				'i'
   #define bdrm_requestTemp				'j'
-  #define bdrm_increaseSetPoint			'k'
-  #define bdrm_decreaseSetPoint			'l'
-  #define bdrm_maintainSetPoint 		'm'
-  #define bdrm_dontMaintainSetPoint		'n'
-  #define bdrm_requestSetPoint			'o'
+  #define bdrm_requestActivate120V1    'k' //k
+  #define bdrm_requestDeactivate120V1  'l' //l
