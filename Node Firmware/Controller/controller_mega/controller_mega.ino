@@ -70,7 +70,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.64 // FW version
+#define FWversion                  0.65 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
@@ -1445,8 +1445,14 @@ void automaticTempSetPoint()
   if(now.dayOfWeek() > 0 && now.dayOfWeek() < 6) // Monday = 1, Friday = 5
   {
 
-   if(nowMsm >= thermostatWeekdayTimePeriod1msmStart && nowMsm < thermostatWeekdayTimePeriod2msmStart)
-    tempSetPoint = thermostatWeekdayTimePeriod1SetPoint;
+   if(nowMsm < thermostatWeekdayTimePeriod2msmStart)//if before start of first period
+   {
+     if(now.dayOfWeek() == 1)//if it's Monday
+       tempSetPoint = thermostatWeekendTimePeriod4SetPoint; //use temperature from period 4 of Sunday night
+    
+    else
+    tempSetPoint = thermostatWeekdayTimePeriod4SetPoint; //use temperature from period 4 of the previous weekday
+   }
     
    if(nowMsm >= thermostatWeekdayTimePeriod2msmStart && nowMsm < thermostatWeekdayTimePeriod3msmStart)
      tempSetPoint = thermostatWeekdayTimePeriod2SetPoint;
@@ -1461,8 +1467,14 @@ void automaticTempSetPoint()
   }
   if(now.dayOfWeek() == 0 || now.dayOfWeek() == 6) //sunday = 0, saturday = 6
   {
-   if(nowMsm >= thermostatWeekendTimePeriod1msmStart && nowMsm < thermostatWeekendTimePeriod2msmStart)
-    tempSetPoint = thermostatWeekendTimePeriod1SetPoint;
+   if(nowMsm < thermostatWeekendTimePeriod2msmStart)//if before start of first period
+    {
+    if(now.dayOfWeek() == 6) //if it's saturday morning
+      tempSetPoint = thermostatWeekdayTimePeriod4SetPoint;//use temperature from period 4 of Friday night   
+    
+    else
+          tempSetPoint = thermostatWeekendTimePeriod4SetPoint;//use temperature from period 4 of Saturday night   
+    }
     
    if(nowMsm >= thermostatWeekendTimePeriod2msmStart && nowMsm < thermostatWeekendTimePeriod3msmStart)
      tempSetPoint = thermostatWeekendTimePeriod2SetPoint;
