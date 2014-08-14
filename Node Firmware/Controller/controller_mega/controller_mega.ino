@@ -69,7 +69,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.67 // FW version
+#define FWversion                  0.68 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
@@ -1018,7 +1018,7 @@ void controlVentFan()
       
       if(ventFanAutoEnabled && (tempAmbient > tempSetPoint + tempHysterisis))
       {
-        if(garageTempOutdoor < tempAmbient)//the fan should only be on if it's colder outside than inside
+        if((garageTempOutdoor - 1.0) < tempAmbient)//the fan should only be on if it's colder outside than inside
         {
          Serial1.print(bsmt_turnFanOn);
          ventFanStatus = boolFromSerial1();  
@@ -1209,40 +1209,53 @@ void sendCommandList()
 
 void sendStatusReport()
 {
-      server.print(F("TEMPERATURES"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
-      server.print(F("Main Floor:     "));
-      server.print(tempAmbient);
-      server.print(F(" 'C"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
+         server.print(F("Controller FW Version: "));
+          server.print(FWversion);
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Memory Used: "));
+          server.print(8192 - freeRam());
+          server.print(F(" / 8192 Bytes ["));
+          server.print((freeRam()/(float(8192))*(float(100))));
+          server.print(F("% free]"));
+          server.write(carriageReturn);
+          server.write(newLine);
+          server.print(F("Uptime: "));
+          sendUptime();
+          if(!SDCardLog)
+         {
+          server.print(("NOT "));
+         }
+          server.print(F("Logging to SD Card"));
+          server.write(carriageReturn);
+          server.write(newLine);
+       now = rtc.now();//update the time from the RTC
 
-      server.print(F("Bedroom:        "));
-      server.print(bedroomTemperature);
-      server.print(F(" 'C"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
+       server.print(F("System Time: "));
+       server.print(now.year(), DEC);
+       server.print(F("/"));
+       if(now.month() < 10)
+          server.print(F("0"));
+       server.print(now.month(), DEC);
+       server.print(F("/"));
+       if(now.day() < 10)
+          server.print(F("0"));
+       server.print(now.day(), DEC);
+       server.print(F(" "));
 
-      server.print(F("Basement:       "));
-      server.print(basementTempAmbient);
-      server.print(F(" 'C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-
-      server.print(F("Garage:         "));
-      server.print(garageTempAmbient);
-      server.print(F(" 'C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-
-      server.print(F("Outdoor:        "));
-      server.print(garageTempOutdoor);
-      server.print(F(" 'C"));
-      server.write(newLine);
-      server.write(carriageReturn);
-      server.write(newLine);
-      server.write(carriageReturn);
+       server.print(now.hour(), DEC);
+       server.print(F(":"));
+       if(now.minute() < 10)
+          server.print(F("0"));
+       server.print(now.minute(), DEC);
+       server.print(F(":"));
+       if(now.second() < 10)
+          server.print(F("0"));
+       server.print(now.second(), DEC);
+       server.write(carriageReturn);
+       server.write(newLine);
+       server.write(carriageReturn);
+       server.write(newLine);
 
 
       server.print(F("SETTINGS"));
@@ -1409,51 +1422,40 @@ void sendStatusReport()
         server.write(newLine);
         server.write(carriageReturn);
 
-          server.print(F("Controller FW Version: "));
-          server.print(FWversion);
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("Memory Used: "));
-          server.print(8192 - freeRam());
-          server.print(F(" / 8192 Bytes ["));
-          server.print((freeRam()/(float(8192))*(float(100))));
-          server.print(F("% free]"));
-          server.write(carriageReturn);
-          server.write(newLine);
-          server.print(F("Uptime: "));
-          sendUptime();
-          if(!SDCardLog)
-         {
-          server.print(("NOT "));
-         }
-          server.print(F("Logging to SD Card"));
-          server.write(carriageReturn);
-          server.write(newLine);
-       now = rtc.now();//update the time from the RTC
 
-       server.print(F("System Time: "));
-       server.print(now.year(), DEC);
-       server.print(F("/"));
-       if(now.month() < 10)
-          server.print(F("0"));
-       server.print(now.month(), DEC);
-       server.print(F("/"));
-       if(now.day() < 10)
-          server.print(F("0"));
-       server.print(now.day(), DEC);
-       server.print(F(" "));
+        server.print(F("TEMPERATURES"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+      server.print(F("Main Floor:     "));
+      server.print(tempAmbient);
+      server.print(F(" 'C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
 
-       server.print(now.hour(), DEC);
-       server.print(F(":"));
-       if(now.minute() < 10)
-          server.print(F("0"));
-       server.print(now.minute(), DEC);
-       server.print(F(":"));
-       if(now.second() < 10)
-          server.print(F("0"));
-       server.print(now.second(), DEC);
-       server.write(carriageReturn);
-       server.write(newLine);
+      server.print(F("Bedroom:        "));
+      server.print(bedroomTemperature);
+      server.print(F(" 'C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+
+      server.print(F("Basement:       "));
+      server.print(basementTempAmbient);
+      server.print(F(" 'C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Garage:         "));
+      server.print(garageTempAmbient);
+      server.print(F(" 'C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
+      server.print(F("Outdoor:        "));
+      server.print(garageTempOutdoor);
+      server.print(F(" 'C"));
+      server.write(newLine);
+      server.write(carriageReturn);
+
 
 }
 

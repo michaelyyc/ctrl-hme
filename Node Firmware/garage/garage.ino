@@ -24,7 +24,7 @@ The temperature sensors are DS18B20
   //Constants
   #define activationTime         15
   #define timeLimit             300
-  #define FWversion             0.41
+  #define FWversion            0.42
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
@@ -226,11 +226,8 @@ void loop() {
        
        if(doorStatus == 0)//door sensor still says open after two attemps, door status is unknown - possible sensor failure??
        {
-                    //Serial.println("door error - program halted");
-        while(1)//infinite loop to halt program operation
          {
-           doorError = 1;
-
+           doorError = 1;//Set the door error flag, which prevents any more attempts to open/close door until flag is explicitally cleared
          }
        }
   }
