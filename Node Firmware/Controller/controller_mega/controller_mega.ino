@@ -69,7 +69,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.66 // FW version
+#define FWversion                  0.67 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
@@ -1016,7 +1016,7 @@ void controlVentFan()
          return;
       }
       
-      if(ventFanAutoEnabled && (tempAmbient > tempSetPoint))
+      if(ventFanAutoEnabled && (tempAmbient > tempSetPoint + tempHysterisis))
       {
         if(garageTempOutdoor < tempAmbient)//the fan should only be on if it's colder outside than inside
         {
@@ -1024,6 +1024,13 @@ void controlVentFan()
          ventFanStatus = boolFromSerial1();  
          return;
         }
+      }
+      
+      if(ventFanAutoEnabled && (tempAmbient < tempSetPoint - tempHysterisis))
+      {
+       Serial1.print(bsmt_turnFanOff);
+       ventFanStatus = !boolFromSerial1(); 
+       return;
       }
       
       ventFanStatus = false;//If the command to turn on the vent fan hasn't been sent lately, set the status to false.
