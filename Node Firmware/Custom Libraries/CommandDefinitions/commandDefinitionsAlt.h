@@ -3,6 +3,10 @@
   #define ctrl_requestTemp               'L' //L
   #define ctrl_enableFurnace             'M' //M
   #define ctrl_disableFurnace            'N' //N
+  #define ctrl_turnFanOn		 'O' // O
+  #define ctrl_turnFanOff                'o' // o
+  #define ctrl_fanAutoOn				 'P' //P
+  #define ctrl_fanAutoOff				 'p' //p
   #define ctrl_setTempSetPoint			 'I' //I
   #define ctrl_listCommands              '?' // ?
   #define ctrl_logOff                    'x' // x
@@ -24,6 +28,7 @@
   #define bsmt_turnFurnaceOn           'C' //C
   #define bsmt_turnFurnaceOff          'D' //D
   #define bsmt_turnFanOn               'E' //E
+  #define bsmt_turnFanOff			   'e' //E
   #define bsmt_turnFurnaceAndFanOff    'F' //F
   #define bsmt_requestTemp             'G' //G
   #define bsmt_requestHumidity         'H' //H
