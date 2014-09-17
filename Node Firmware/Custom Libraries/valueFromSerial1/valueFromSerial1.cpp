@@ -115,6 +115,36 @@ bool boolFromSerial1()
 	}
 }
 
+int boolIntFromSerial1()
+{
+	//local variables
+    int inputByte;	      //store the byte read from the serial port
+    double loopCounter = 0;
+    
+
+                     
+	while (1)//Do this loop until it is broken out of by detecting a 1 or 0
+	{
+		if(loopCounter > 100000)
+     	{
+     		return -1111; // Timeout error
+     	}
+  
+        inputByte = Serial1.read();//read a byte from the serial port
+		
+		if(inputByte == '1') //ASCII  = true
+		{
+			return 1;
+		}
+		
+		if(inputByte =='0') 
+		{
+			return 0;
+		}
+	loopCounter++;	
+	}
+}
+
 
 
 int intFromSerial1(int delimiter)

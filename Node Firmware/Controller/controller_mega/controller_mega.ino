@@ -69,7 +69,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.69 // FW version
+#define FWversion                  0.70 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 #define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
@@ -165,7 +165,7 @@ float basementTempAmbient= -127.0; //value used to store basement temperature as
 float garageFirmware = -1; // track the garage node firmware version
 float garageTempOutdoor = -127.0;  //value used to store outdoor temperature as received from the garage node
 float garageTempAmbient = -127.0; //value used to store garage temperature as measured from the garage node
-bool garageDoorStatus = false;
+int garageDoorStatus = -1111; // 0 = open, 1 = closed, -1111 = timeout
 bool garageDoorError = false; //track whether garage door error flag is set
 bool garageLastDoorActivation = false; //keep track of whether the last door activation was to open or close. 0 = open, 1 = close
 bool garageAutoCloseStatus = false; // track whether auto close is enabled or not
@@ -173,8 +173,10 @@ bool blockHeaterStatus = 0; //track whether the 120V outlet is on, 1 = on, 0 = o
 
 //Global variables from the bedroom node
 float bedroomFirmware = -1;
-float bedroomTemperature = -127.0;
-float bedroomTemperatureSetPoint = 17.0;
+float masterBedroomTemperature = -127.0;
+float masterBedroomTemperatureSetPoint = 17.0;
+float backBedroomTemperature = -127.0;
+float frontBedroomTemperature = -127.0;
 bool bedroomMaintainTemp = false;
 bool bedroomHeaterStatus = false;
 
@@ -507,9 +509,9 @@ void loop()
         if(inputChar == ctrl_setBedroomSetPoint)
         {
            commandSent = true;
-           bedroomTemperatureSetPoint = programThermostatSetPoint(-1); //Get a new thermostat set point from telnet connection
+           masterBedroomTemperatureSetPoint = programThermostatSetPoint(-1); //Get a new thermostat set point from telnet connection
             server.print(F("New bedroom set point: "));
-            server.print(bedroomTemperatureSetPoint);
+            server.print(masterBedroomTemperatureSetPoint);
             server.print(F("' C"));
 
             if(!bedroomMaintainTemp)
@@ -525,7 +527,7 @@ void loop()
            commandSent = true;
            bedroomMaintainTemp = true;
            server.print(F("Maintaining "));
-           server.print(bedroomTemperatureSetPoint);
+           server.print(masterBedroomTemperatureSetPoint);
            server.print(F(" 'C in bedroom until "));
            server.print(bedroomHeaterAutoOffHour);
            server.print(F(":00am"));
@@ -656,7 +658,7 @@ void loop()
               server.print(F("Opening Garage Door"));
               server.write(carriageReturn);
               server.write(newLine);
-              garageDoorStatus = false;
+              garageDoorStatus = 0;
               digitalWrite(garageDoorStatusPin, garageDoorStatus);
             }
           }
@@ -844,9 +846,9 @@ void loop()
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           Serial1.print(bdrm_requestTemp);
-          bedroomTemperature = floatFromSerial1('!');
+          masterBedroomTemperature = floatFromSerial1('!');
           server.print(F("Bedroom Temperature: "));
-          server.print(bedroomTemperature);
+          server.print(masterBedroomTemperature);
           server.write(newLine);
           server.write(carriageReturn);
         }
@@ -930,7 +932,7 @@ float readAmbientTemp()
 {
   float temp;
   sensors1.requestTemperatures();
-  temp = sensors1.getTempCByIndex(0) + tempOffset;
+  temp = sensors1.getTempCByIndex(0);
   return temp;
 }
 
@@ -1043,7 +1045,7 @@ void controlVentFan()
 void controlBedroomHeater()
 {
   //Make sure tempSetPoint is reasonable. This is a safety feature to prevent house over-heating
-  if(bedroomTemperatureSetPoint < tempMinimumAllowed || bedroomTemperatureSetPoint > tempMaximumAllowed)
+  if(masterBedroomTemperatureSetPoint < tempMinimumAllowed || masterBedroomTemperatureSetPoint > tempMaximumAllowed)
   {
     Serial.println("ERROR: Bedroom temperature Setpoint of of range!");
     return;
@@ -1052,12 +1054,12 @@ void controlBedroomHeater()
 
   //Control furnace by sending commands to the bedroom node based on tempAmbient
 
-  if(bedroomTemperature == -127.0 || bedroomTemperature == 0.0)
+  if(masterBedroomTemperature == -127.0 || masterBedroomTemperature == 0.0)
   {
       return;//Don't act on bad values - do nothing
   }
       //turn the furnace off if necessary
-      if(bedroomTemperature > (bedroomTemperatureSetPoint + tempHysterisis))
+      if(masterBedroomTemperature > (masterBedroomTemperatureSetPoint + tempHysterisis))
       {
         bedroomHeaterStatus = false;//prevent heater from turning on in the next loop
         Serial1.print(bdrm_requestDeactivate120V1);
@@ -1074,7 +1076,7 @@ void controlBedroomHeater()
 
 
       // turn the furnace on if necessary
-      if(bedroomHeaterStatus || (bedroomTemperature < (bedroomTemperatureSetPoint - tempHysterisis)))
+      if(bedroomHeaterStatus || (masterBedroomTemperature < (masterBedroomTemperatureSetPoint - tempHysterisis)))
       {
         bedroomHeaterStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
         Serial1.print(bdrm_requestActivate120V1);//this command must be repeated at least every 5 minutes or the heater will automatically turn off (see firmware for basement node)
@@ -1261,8 +1263,8 @@ void sendStatusReport()
       server.print(F("SETTINGS"));
       server.write(newLine);
       server.write(carriageReturn);
-      server.print(F("Bedroom Thermostat:  "));
-      server.print(bedroomTemperatureSetPoint);
+      server.print(F("M.Bedroom Thermostat: "));
+      server.print(masterBedroomTemperatureSetPoint);
       server.print(F(" 'C"));
 
 
@@ -1279,7 +1281,7 @@ void sendStatusReport()
         server.write(newLine);//new line
         server.write(carriageReturn);
 
-       server.print(F("Main Thermostat   :  "));
+       server.print(F("Main Thermostat     : "));
        server.print(tempSetPoint);
        server.print(F(" 'C"));
 
@@ -1297,7 +1299,7 @@ void sendStatusReport()
         server.write(newLine);//new line
         server.write(carriageReturn);
 
-       server.print(F("Automatic Vent    :  "));
+       server.print(F("Automatic Vent      : "));
      if(ventFanAutoEnabled)
         {
           server.print(F("ENABLED"));
@@ -1432,8 +1434,19 @@ void sendStatusReport()
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-      server.print(F("Bedroom:        "));
-      server.print(bedroomTemperature);
+      server.print(F("Front Bedroom:  "));
+      server.print(frontBedroomTemperature);
+      server.print(F(" 'C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+
+      server.print(F("Back Bedroom:   "));
+      server.print(backBedroomTemperature);
+      server.print(F(" 'C"));
+      server.write(newLine);//new line
+      server.write(carriageReturn);
+      server.print(F("Master Bedroom: "));
+      server.print(masterBedroomTemperature);
       server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
@@ -1506,14 +1519,16 @@ void sendUptime()
 void requestAndUpdateGarageDoorStatus()
 {
           Serial1.print(grge_requestDoorStatus);
-          garageDoorStatus = boolFromSerial1();
+          garageDoorStatus = boolIntFromSerial1();
           digitalWrite(garageDoorStatusPin, garageDoorStatus);
 
           server.print(F("Garage door is "));
-          if(garageDoorStatus)
+          if(garageDoorStatus == 1)
             server.print(F("CLOSED"));
-          else
+          if(garageDoorStatus == 0)
             server.print(F("OPEN"));
+          if(garageDoorStatus == -1111)
+            server.print(F("UNRESPONSIVE"));
           server.write(newLine);
           server.write(carriageReturn);
 }
@@ -1521,8 +1536,8 @@ void requestAndUpdateGarageDoorStatus()
 void getPeriodicUpdates()
 {
     //Get a reading from the controller's built in 1-wire temperature sensor
-    tempAmbient = readAmbientTemp();
-
+    tempAmbient = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
+    frontBedroomTemperature = readAmbientTemp();
 
     //Get updates from the garage node
     Serial1.print(grge_requestTempZone2); //relay the command to the serial port
@@ -1530,7 +1545,7 @@ void getPeriodicUpdates()
     Serial1.print(grge_requestTempZone1);
     garageTempAmbient = floatFromSerial1('!');
     Serial1.print(grge_requestDoorStatus);
-    garageDoorStatus = boolFromSerial1();
+    garageDoorStatus = boolIntFromSerial1();
     digitalWrite(garageDoorStatusPin, garageDoorStatus);
 
     //Get updates from the basement node
@@ -1539,7 +1554,7 @@ void getPeriodicUpdates()
 
     //Get updates from the bedroom node
     Serial1.print(bdrm_requestTemp);
-    bedroomTemperature = floatFromSerial1('!');
+    masterBedroomTemperature = floatFromSerial1('!');
 
     //Perform time-triggered actions
     disableBedroomHeaterOnTimer(); //Disable bedroom heater at pre-defined time
@@ -1584,6 +1599,10 @@ void automaticTempSetPoint()
     tempSetPoint = thermostatWeekdayTimePeriod4SetPoint; //use temperature from period 4 of the previous weekday
    }
 
+
+   if(nowMsm >= thermostatWeekdayTimePeriod1msmStart && nowMsm < thermostatWeekdayTimePeriod2msmStart)
+     tempSetPoint = thermostatWeekdayTimePeriod1SetPoint;
+
    if(nowMsm >= thermostatWeekdayTimePeriod2msmStart && nowMsm < thermostatWeekdayTimePeriod3msmStart)
      tempSetPoint = thermostatWeekdayTimePeriod2SetPoint;
 
@@ -1606,6 +1625,9 @@ void automaticTempSetPoint()
           tempSetPoint = thermostatWeekendTimePeriod4SetPoint;//use temperature from period 4 of Saturday night
     }
 
+   if(nowMsm >= thermostatWeekendTimePeriod1msmStart && nowMsm < thermostatWeekendTimePeriod2msmStart)
+     tempSetPoint = thermostatWeekendTimePeriod1SetPoint;
+     
    if(nowMsm >= thermostatWeekendTimePeriod2msmStart && nowMsm < thermostatWeekendTimePeriod3msmStart)
      tempSetPoint = thermostatWeekendTimePeriod2SetPoint;
 
@@ -2011,7 +2033,7 @@ void programThermostatRestoreFromEEPROM()
 //This function saves all the data to an SD card in a CSV file format
 void saveToSDCard()
 {
-  if(lastLogMinute == now.minute() && garageDoorStatus)
+  if(lastLogMinute == now.minute() && garageDoorStatus == 1)
   {
     return; // don't log anything if it's less than a minute since last event, unless the garage door is opened.
   }
@@ -2070,9 +2092,13 @@ void saveToSDCard()
   dataString += ",";
   dataString += String(ventFanStatus);
   dataString += ",";
-  dataString += String(bedroomTemperature);
+  dataString += String(frontBedroomTemperature);
   dataString += ",";
-  dataString += String(bedroomTemperatureSetPoint);
+  dataString += String(backBedroomTemperature);
+  dataString += ",";
+  dataString += String(masterBedroomTemperature);
+  dataString += ",";
+  dataString += String(masterBedroomTemperatureSetPoint);
   dataString += ",";
   dataString += String(bedroomMaintainTemp);
   dataString += ",";
@@ -2135,9 +2161,13 @@ void writeHeaderToSDCard()
   dataString += ",";
   dataString += String("ventFanStatus");
   dataString += ",";
-  dataString += String("bedroomTemperature");
+  dataString += String("frontBedroomTemperature");
   dataString += ",";
-  dataString += String("bedroomTemperatureSetPoint");
+  dataString += String("backBedroomTemperature");
+  dataString += ",";
+  dataString += String("masterBedroomTemperature");
+  dataString += ",";
+  dataString += String("masterBedroomTemperatureSetPoint");
   dataString += ",";
   dataString += String("bedroomMaintainTemp");
   dataString += ",";
