@@ -36,7 +36,11 @@
 //#include <valueFromTelnet.h>
 #include <commandDefinitionsAlt.h>
 #include <privatePasswordFile.h>
+#include "plotly_streaming_ethernet.h"
 
+
+//Defines
+//#define plotlyOn
 
 //EEPROM Map
 #define EEPROM_thermostatWeekdayTimePeriod1HourStart 			0
@@ -69,13 +73,12 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.70 // FW version
+#define FWversion                  0.74 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
-#define bedroomHeaterAutoOffHour      8 //automatically turn off the bedroom heater at this time
-#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
-#define blockHeaterOffHour            9 //hour to turn the block heater off automatically
-#define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
+//#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
+#define blockHeaterOffHour           20 //hour to turn the block heater off automatically
+#define blockHeaterMaxTemp           -4 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
@@ -85,8 +88,8 @@
 //ASCII values
 #define newLine                      10 // ASCII NEW LINE
 #define carriageReturn               13 // ASCII Carriage return
-#define tempOffset                -0.80 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
-#define chipSelect                  4 //Chip select for the SD card used to store log data
+#define tempOffset                   -0.4 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
+#define chipSelect                   4 //Chip select for the SD card used to store log data
 
 
 /* NETWORK CONFIGURATION
@@ -112,6 +115,15 @@ DallasTemperature sensors1(&oneWire1);
 
 //Realtime clock Configuration
 RTC_DS1307 rtc; //the realtime clock object
+
+
+#ifdef plotlyOn
+//Plot.ly constants
+#define nTraces 19
+char *tokens[nTraces] = {"lk9ptjliw1","edlnwbgv76","1rq3kmwflp","yixcbzx6ln","ux0go17f8r","wz0qmd8uq7","w1cc14d5py","xtavfhzooi","bp7gfumana","b4dnrc5tml","mh8n1cetbz","x5qyhhz1tx","8qg4w9rg02","ygs2pprjiw","lubyhpbry6","2ewdc1sj33","0lil5m5c4v","xl05yr617u","nkpqmw98nl"};
+plotly graph = plotly("michaelyyc", "hyv6ttj87t", tokens, "homeData", nTraces);
+#endif
+
 
 //Global Variables
 DateTime now; //variable to store the current date & time from the RTC
@@ -145,6 +157,8 @@ int thermostatWeekdayTimePeriod3msmStart; //heat up before we get home from work
 float thermostatWeekdayTimePeriod3SetPoint;
 int thermostatWeekdayTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekdayTimePeriod4SetPoint;
+int bedroomHeaterAutoOffHour;      //automatically turn off the bedroom heater at this time
+int blockHeaterOnHour = 4;
 
 
 //Variables for the automatic Thermostat [weekends]
@@ -232,11 +246,24 @@ void setup()
     //Initialize the Ethernet Adapter
   byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  //MAC Address
   byte ip[] = { 192, 168, 1, 230 };   // IP Address
-  byte gateway[] = { 10, 0, 0, 1 }; //Gateway (optional, not used)
-  byte subnet[] = { 255, 255, 0, 0 }; //Subnet
+  byte dns[] = { 8, 8, 8, 8 };
+  byte gateway[] = { 192, 168, 1, 100 }; //Gateway (optional, not used)
+  byte subnet[] = { 255, 255, 255, 0 }; //Subnet
 
   // initialize the ethernet device
-  Ethernet.begin(mac, ip, gateway, subnet);
+  Ethernet.begin(mac, ip, dns, gateway, subnet);
+
+ #ifdef plotlyOn
+  // connect to plotly server
+  graph.fileopt="extend";
+  graph.timezone="America/Denver";
+  while(!graph.init()){
+  if(graph.init()){
+    break;
+    }
+  };
+  graph.openStream(); 
+  #endif
 
   // start listening for clients
   server.begin();
@@ -353,6 +380,24 @@ void loop()
           server.print(FWversion);
           server.write(newLine);//new line
           server.write(carriageReturn);
+        }
+        
+        if(inputChar == ctrl_telnetSerialRelay)
+        {
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop
+         server.print(F("Starting telnet<->Serial Relay. Escape character is '!'")); 
+         server.write(newLine);//new line
+         server.write(carriageReturn);
+         telnetSerialRelay('!');
+         server.print(F("Relay session ended")); 
+         server.write(newLine);//new line
+         server.write(carriageReturn);
+        }
+        
+        if(inputChar == ctrl_triggerUpdatesNow)
+        {
+         getPeriodicUpdates(); 
+         commandSent = true; //set the commandSent variable true so it is't sent again this loop  
         }
 
  /*       if(inputChar == ctrl_requestTemp)
@@ -880,12 +925,9 @@ void loop()
       now = rtc.now();//get time from the RTC
       if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelayLong) //Update the temp sensors and send furnace commands if needed
       {
-        server.print(F("Updating sensor data..."));
         getPeriodicUpdates();//Update the temperature and other sensors
         saveToSDCard();
-        server.print(F("Done"));
-        server.write(newLine);
-        server.write(carriageReturn);
+        sendToPlotly();
 
       }
       if(didClientTimeout())
@@ -911,6 +953,8 @@ void loop()
       {
         getPeriodicUpdates();//Update the temperature and other sensors
         saveToSDCard();
+        sendToPlotly();
+
       }
 
   //If there is no telnet client connected, just read and ignore the serial port
@@ -942,6 +986,7 @@ void disableBedroomHeaterOnTimer()//Automatically turns the bedroom heater off i
     if(now.hour() == bedroomHeaterAutoOffHour && now.minute() <= 5)
     {
       bedroomMaintainTemp = false;
+      bedroomHeaterStatus = false;
     }
 }
 
@@ -1536,8 +1581,12 @@ void requestAndUpdateGarageDoorStatus()
 void getPeriodicUpdates()
 {
     //Get a reading from the controller's built in 1-wire temperature sensor
+
+    server.print(F("Updating sensor data..."));
+        
     tempAmbient = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
     frontBedroomTemperature = readAmbientTemp();
+    Serial1.flush();//flush serial buffer
 
     //Get updates from the garage node
     Serial1.print(grge_requestTempZone2); //relay the command to the serial port
@@ -1546,12 +1595,23 @@ void getPeriodicUpdates()
     garageTempAmbient = floatFromSerial1('!');
     Serial1.print(grge_requestDoorStatus);
     garageDoorStatus = boolIntFromSerial1();
+    if(garageDoorStatus == -1111)//no response from garage node
+    {
+     if(!client.connected())//if there is no client connected
+      {
+       Serial1.flush();//flush serial buffer
+       Serial1.print(grge_requestDoorStatus);//and try getting garage door status one more time
+       garageDoorStatus = boolIntFromSerial1();   
+      }
+    }
     digitalWrite(garageDoorStatusPin, garageDoorStatus);
 
     //Get updates from the basement node
     Serial1.print(bsmt_requestTemp);
     basementTempAmbient = floatFromSerial1('!');
-
+    Serial1.print(bsmt_requestTempZone2);
+    backBedroomTemperature = floatFromSerial1('!');
+    
     //Get updates from the bedroom node
     Serial1.print(bdrm_requestTemp);
     masterBedroomTemperature = floatFromSerial1('!');
@@ -1574,6 +1634,11 @@ void getPeriodicUpdates()
     now = rtc.now();//read time from the RTC
 
     lastUpdateTime = now.unixtime();//update the timer for periodic updates
+    
+    
+    server.print(F("Done"));
+    server.write(newLine);
+    server.write(carriageReturn);
 
 }
 
@@ -1660,12 +1725,9 @@ void programThermostat()
       now = rtc.now();//update the time from the RTC
       if((now.unixtime() - lastUpdateTime.unixtime()) > tempUpdateDelayLong) //Update the temp sensors and send furnace commands if needed
       {
-        server.print(F("Updating sensor data..."));
         getPeriodicUpdates();//Update the temperature and other sensors
         saveToSDCard();
-        server.print(F("Done"));
-        server.write(newLine);
-        server.write(carriageReturn);
+        sendToPlotly();
       }
 
       //see if the telnet client is still alive
@@ -1694,6 +1756,8 @@ void programThermostat()
           case 'a': //change weekday period 1
           thermostatWeekdayTimePeriod1msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod1HourStart, EEPROM_thermostatWeekdayTimePeriod1MinuteStart);
           thermostatWeekdayTimePeriod1SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
+            bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
+            blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
             programThermostatDisplaySettings();
 
           break;
@@ -1991,7 +2055,8 @@ void programThermostatRestoreFromEEPROM()
 
   //make sure that the EEPROM doesn't have any blank values in the range where the
   //thermostat settings should be stored
-
+  bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
+  blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
   thermostatWeekdayTimePeriod1msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1MinuteStart));
   thermostatWeekdayTimePeriod1SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
   thermostatWeekdayTimePeriod1SetPoint = thermostatWeekdayTimePeriod1SetPoint / 10;
@@ -2029,6 +2094,39 @@ void programThermostatRestoreFromEEPROM()
 
  return;
 }
+
+//This function uploads all the data to the Plot.ly server
+void sendToPlotly()
+{
+    #ifdef plotlyOn
+    if(garageDoorStatus != -1111)
+      graph.plot(millis(), garageDoorStatus, tokens[0]);
+    
+    graph.plot(millis(), tempAmbient, tokens[1]);
+    graph.plot(millis(), tempSetPoint, tokens[2]);
+    graph.plot(millis(), maintainTemperature, tokens[3]);    
+    graph.plot(millis(), furnaceStatus, tokens[4]);
+    graph.plot(millis(), ventFanForceOn, tokens[5]);
+    graph.plot(millis(), ventFanAutoEnabled, tokens[6]);
+    graph.plot(millis(), ventFanStatus, tokens[7]);   
+    graph.plot(millis(), frontBedroomTemperature, tokens[8]);
+    graph.plot(millis(), backBedroomTemperature, tokens[9]);
+    graph.plot(millis(), masterBedroomTemperature, tokens[10]);    
+    graph.plot(millis(), masterBedroomTemperatureSetPoint, tokens[11]);
+    graph.plot(millis(), bedroomMaintainTemp, tokens[12]);
+    graph.plot(millis(), bedroomHeaterStatus, tokens[13]);
+    graph.plot(millis(), basementTempAmbient, tokens[14]);
+    if(garageTempAmbient != -1111)
+      graph.plot(millis(), garageTempAmbient, tokens[15]);
+    if(garageTempOutdoor != -1111)
+      graph.plot(millis(), garageTempOutdoor, tokens[16]);
+    graph.plot(millis(), blockHeaterEnabled, tokens[17]);    
+    graph.plot(millis(), blockHeaterStatus, tokens[18]);
+    #endif
+}
+
+
+
 
 //This function saves all the data to an SD card in a CSV file format
 void saveToSDCard()
@@ -2356,5 +2454,42 @@ int minutesFrommsm(int msm)
 {
  return msm % 60;
 }
+
+void telnetSerialRelay(int escapeChar)
+{
+  while(1)
+  {
+//read telnet and output to serial
+  if(client.available())
+  {
+    inputChar = client.read();// read in the data
+    if(inputChar == escapeChar) //see if it's the escape character
+    {
+      return; //leave the function if it's the escape character
+    }
+     timeOfLastInput = millis();//set the time of last Input to NOW
+     
+     Serial1.print(inputChar);//relay the telnet input to the serial port
+  }
+  
+  if(Serial1.available()) // see if there is data waiting on the serial port
+  {
+    inputChar = Serial1.read(); //read in the serial data
+    server.write(inputChar); //relay the serial data to the telnet client
+  }
+ 
+        if(didClientTimeout())
+      {
+        server.print(F("Session Timeout - Disconnecting"));
+        server.write(newLine);
+        server.write(carriageReturn);
+        client.stop();
+        password.reset();
+        timeOfLastInput = millis();
+        return;
+      }
+  }
+}
+
 
 

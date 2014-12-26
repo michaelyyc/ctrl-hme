@@ -18,6 +18,8 @@
   #define ctrl_enableBedroomHeater       'm' //m
   #define ctrl_disableBedroomHeater      'n' //n
   #define ctrl_toggleThermostatSchedule  't' //t
+  #define ctrl_telnetSerialRelay		 '!' //!
+  #define ctrl_triggerUpdatesNow		 '#' //#
 
 
 //BASEMENT COMMANDS
@@ -34,7 +36,8 @@
   #define bsmt_requestHumidity         'H' //H
   #define bsmt_requestMoistureStatus   'I' //I
   #define bsmt_requestCPUTemp          'J' //J
-
+  #define bsmt_requestTempZone2		   'o' //o
+  #define bsmt_requestTempZone3		   'u' //u
   
 //GARAGE COMMANDS
 //Commands from the controller

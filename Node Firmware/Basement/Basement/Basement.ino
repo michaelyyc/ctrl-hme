@@ -18,13 +18,15 @@ Furnace and fan can both be controlled by remote command
 
 
   //I/O pin definitions
-  #define furnaceControlRelay         3 //door sensor connection
-  #define fanControlRelay             4 //status indicator light on board
-  #define oneWireBus1                 2 // temperature sensor
+  #define furnaceControlRelay         3 // controls heat on furnace
+  #define fanControlRelay             4 // controls ventillation fan on furnace
+  #define oneWireBus1                 2 // temperature sensor for zone 1 (basement)
+  #define oneWireBus2                 5 // temperature sensor for zone 2 (back bedroom)
+  #define oneWireBus3                 6 // temperature sensor for zone 3 (main floor)
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion             0.51
+  #define FWversion            0.52
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
   #define tempUpdateDelay        30 //how many seconds (approx) between updates of the temperature sensors
@@ -38,6 +40,8 @@ Furnace and fan can both be controlled by remote command
   int i2; //for loops
   int commandReq = 0; //variable to store the request from the controller
   float tempAmbient = -1; //temperature from Zone 1 in degrees C
+  float tempZone2 = -1; // Temperature from zone 2 in degrees C
+  float tempZone3 = -1; // Temperature from zone 3 in degrees C
   float CPUTemp = -1;
   bool lightStatus;
   long int tempUpdateCountdown;
@@ -45,9 +49,15 @@ Furnace and fan can both be controlled by remote command
 
   // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
  OneWire oneWire1(oneWireBus1);
+ OneWire oneWire2(oneWireBus2);
+ OneWire oneWire3(oneWireBus3);
   // Pass our oneWire reference to Dallas Temperature. 
   DallasTemperature sensors1(&oneWire1);
-  
+  DallasTemperature sensors2(&oneWire2);
+  DallasTemperature sensors3(&oneWire3);
+
+
+
   // the setup routine runs once when the node is powered on
 void setup() {
   // initialize serial communication at 9600 bits per second:
@@ -59,7 +69,9 @@ void setup() {
   //Start with the furnace and fan off (active low)
   digitalWrite(fanControlRelay, HIGH);
   digitalWrite(furnaceControlRelay, HIGH);
-  sensors1.begin(); // Start up the library for one-wire bus 1
+  sensors1.begin(); // Start up the library for one-wire bus 1 - temperature zone 1
+  sensors2.begin(); // Start up the library for one-wire bus 2 - temperature zone 2
+  sensors3.begin(); // Start up the library for one-wire bus 3 - temperature zone 3
 }
 
 
@@ -77,6 +89,10 @@ void loop() {
     digitalWrite(statusLight, HIGH);
     sensors1.requestTemperatures();
     tempAmbient = sensors1.getTempCByIndex(0);
+    sensors2.requestTemperatures();
+    tempZone2 = sensors2.getTempCByIndex(0);
+    sensors3.requestTemperatures();
+    tempZone3 = sensors3.getTempCByIndex(0);
     tempUpdateCountdown = (tempUpdateDelay * loopsPerSecond) + 1;
     CPUTemp = getCPUTemp();
 // Turn off the status light
@@ -230,6 +246,22 @@ void commandReply()
     return;
   }
   
+  if(commandReq == bsmt_requestTempZone2)
+  {
+    Serial.print("Bo");
+    Serial.print(tempZone2);
+    Serial.print("!");
+    return;
+  }
+  
+  if(commandReq == bsmt_requestTempZone3)
+  {
+    Serial.print("Bu");
+    Serial.print(tempZone3);
+    Serial.print("!");
+    return;
+  }
+    
 //  Serial.print("!");//reply for unimplemented commands
       return;
 }
