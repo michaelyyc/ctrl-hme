@@ -73,11 +73,11 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.74 // FW version
+#define FWversion                  0.75 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 //#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
-#define blockHeaterOffHour           20 //hour to turn the block heater off automatically
+//#define blockHeaterOffHour           20 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -4 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
@@ -158,8 +158,8 @@ float thermostatWeekdayTimePeriod3SetPoint;
 int thermostatWeekdayTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekdayTimePeriod4SetPoint;
 int bedroomHeaterAutoOffHour;      //automatically turn off the bedroom heater at this time
-int blockHeaterOnHour = 4;
-
+int blockHeaterOnHour = 4; //this updates based on thermostatWeekdayTimePeriod1msmStart
+int blockHeaterOffHour = 9; //this updates based on thermostatWeekdayTimePeriod1msmStart
 
 //Variables for the automatic Thermostat [weekends]
 int thermostatWeekendTimePeriod1msmStart; //system on-time in the morning
@@ -502,9 +502,11 @@ void loop()
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           blockHeaterEnabled = true;
-          server.print(F("Block Heater will turn on after "));
+          server.print(F("Block Heater will turn on between "));
           server.print(blockHeaterOnHour);
-          server.print(F(":00h if Temperature is below "));
+          server.print(F(":00h and "));
+          server.print(blockHeaterOffHour);
+          server.print(F(":00h if garage temp is below "));
           server.print(blockHeaterMaxTemp);
           server.print(F(" 'C"));
           server.write(newLine);//new line
@@ -1362,11 +1364,13 @@ void sendStatusReport()
         server.print(F("Block Heater will "));
         if(blockHeaterEnabled)
         {
-          server.print(F("turn on after "));
+          server.print(F("turn on between "));
           server.print(blockHeaterOnHour);
-          server.print(F(":00h if Temperature is below "));
+          server.print(F(":00h and "));
+          server.print(blockHeaterOffHour);
+          server.print(F(":00h if garage temp is below "));
           server.print(blockHeaterMaxTemp);
-          server.print(F(" 'C in garage"));
+          server.print(F(" 'C"));
           server.write(newLine);//new line
           server.write(carriageReturn);
         }
@@ -1582,8 +1586,10 @@ void getPeriodicUpdates()
 {
     //Get a reading from the controller's built in 1-wire temperature sensor
 
+    if(validPassword) //only output this if someone is logged in successfully
     server.print(F("Updating sensor data..."));
-        
+  
+   
     tempAmbient = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
     frontBedroomTemperature = readAmbientTemp();
     Serial1.flush();//flush serial buffer
@@ -1636,10 +1642,12 @@ void getPeriodicUpdates()
     lastUpdateTime = now.unixtime();//update the timer for periodic updates
     
     
+    if(validPassword) //only output this if someone is logged in successfully
+  {
     server.print(F("Done"));
     server.write(newLine);
     server.write(carriageReturn);
-
+  }
 }
 
 void automaticTempSetPoint()
@@ -1758,6 +1766,7 @@ void programThermostat()
           thermostatWeekdayTimePeriod1SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
             bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
             blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
+            blockHeaterOffHour = bedroomHeaterAutoOffHour + 4;
             programThermostatDisplaySettings();
 
           break;
@@ -2057,6 +2066,8 @@ void programThermostatRestoreFromEEPROM()
   //thermostat settings should be stored
   bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
   blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
+  blockHeaterOffHour = bedroomHeaterAutoOffHour + 4;
+  
   thermostatWeekdayTimePeriod1msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1MinuteStart));
   thermostatWeekdayTimePeriod1SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
   thermostatWeekdayTimePeriod1SetPoint = thermostatWeekdayTimePeriod1SetPoint / 10;
