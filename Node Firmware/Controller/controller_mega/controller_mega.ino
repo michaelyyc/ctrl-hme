@@ -35,6 +35,7 @@
 #include <valueFromSerial1.h>
 //#include <valueFromTelnet.h>
 #include <commandDefinitionsAlt.h>
+#include <XBEEDataIdentifiers.h>
 #include <privatePasswordFile.h>
 #include "plotly_streaming_ethernet.h"
 
@@ -73,7 +74,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.75 // FW version
+#define FWversion                  0.76 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 //#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
@@ -174,7 +175,7 @@ float thermostatWeekendTimePeriod4SetPoint;
 
 //Global variables from the basement node
 float basementTempAmbient= -127.0; //value used to store basement temperature as measured from the basement node
-
+float livingRoomTemperature = -127.0;
 //Global variables from Garage Node
 float garageFirmware = -1; // track the garage node firmware version
 float garageTempOutdoor = -127.0;  //value used to store outdoor temperature as received from the garage node
@@ -277,6 +278,10 @@ void loop()
   // Periodically and the furnace control function is called to maintain temperature if
   // appropriately configured.
 
+  // Check if any messages ahve arrived from the XBEE nodes
+  readSerial();
+
+
   client = server.available();
 
   // clear the valid password flag from any previous user
@@ -302,6 +307,9 @@ void loop()
     while(!validPassword && client.connected())
     {
 
+// Check if any messages ahve arrived from the XBEE nodes
+      readSerial();
+      
       if(client.available())
       {
         inputChar = client.read();
@@ -359,6 +367,9 @@ void loop()
       server.write(newLine);
       server.write(carriageReturn);
     }
+ 
+      // Check if any messages ahve arrived from the XBEE nodes
+    readSerial();
 
     //Connected Loop - this is repeated as long as the client is connected
     //The loop relays data between the telnet client and the serial port (XBEE network)
@@ -366,6 +377,10 @@ void loop()
     //Only ascii data is relayed from the telnet client to the serial port
     while(validPassword && client.connected())
     {
+      // Check if any messages ahve arrived from the XBEE nodes
+      readSerial();
+
+      
       if(client.available()) //This is true if the telnet client has sent any data
       {
         inputChar = client.read(); //read in the client data
@@ -856,7 +871,14 @@ void loop()
         if(inputChar == grge_requestDoorStatus)
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
-          requestAndUpdateGarageDoorStatus();
+ //         requestAndUpdateGarageDoorStatus();
+           server.print(F("Garage door is "));
+          if(garageDoorStatus == 1)
+            server.print(F("CLOSED"));
+          if(garageDoorStatus == 0)
+            server.print(F("OPEN"));
+          server.write(newLine);
+          server.write(carriageReturn);
         }
 
 
@@ -1469,10 +1491,15 @@ void sendStatusReport()
         }
 
 
-        requestAndUpdateGarageDoorStatus();
-        server.write(newLine);
+        server.print(F("Garage door is "));
+          if(garageDoorStatus == 1)
+            server.print(F("CLOSED"));
+          if(garageDoorStatus == 0)
+            server.print(F("OPEN"));
+            server.write(newLine);
         server.write(carriageReturn);
-
+            server.write(newLine);
+        server.write(carriageReturn);
 
         server.print(F("TEMPERATURES"));
       server.write(newLine);//new line
@@ -2503,4 +2530,61 @@ void telnetSerialRelay(int escapeChar)
 }
 
 
+//Read data from the serial port (XBEE) and put the received data into the correct variables
+void readSerial()
+{
+	if(Serial1.available() > 0)
+	{
+		inputChar = Serial1.read();//read in 1 byte
+		switch (inputChar)
+                {
+		case garage_doorStatus:
+			garageDoorStatus = boolFromSerial1();
+                        //to-do: detect change in garage door status from last value, if it changed, log this immediately to the telnet client and the SD card
+		break;
 
+		case garage_tempZone1:
+			garageTempOutdoor = floatFromSerial1('!');
+		break;
+
+		case garage_tempZone2:
+			garageTempAmbient = floatFromSerial1('!');
+		break;
+
+		case garage_autoCloseEnabled:
+			garageAutoCloseStatus = boolFromSerial1();
+		break;
+
+                case garage_error:
+                        garageDoorError = boolFromSerial1();
+                break;
+                
+		case bsmt_tempZone1:
+			basementTempAmbient = floatFromSerial1('!');
+		break;
+
+		case bsmt_tempZone2:
+			backBedroomTemperature = floatFromSerial1('!');
+		break;
+
+		case bsmt_tempZone3:
+			livingRoomTemperature = floatFromSerial1('!');
+		break;
+
+		case bdrm_temp:
+			masterBedroomTemperature = floatFromSerial1('!');
+		break;
+
+		case bdrm_outlet1Status:
+			bedroomHeaterStatus = boolFromSerial1();
+		break;
+
+		default: //if none of the case conditions is met
+                    // do nothing
+	        break;
+                }
+
+	}
+
+
+}

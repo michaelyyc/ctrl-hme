@@ -1,6 +1,7 @@
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <commandDefinitionsAlt.h>
+#include <XBEEDataIdentifiers.h>
 
 /*
 Garage door monitor
@@ -24,12 +25,13 @@ The temperature sensors are DS18B20
   //Constants
   #define activationTime         15
   #define timeLimit             300
-  #define FWversion            0.42
+  #define FWversion            0.76
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
   //Variables
   bool doorStatus = 0;// 0 = open, 1 = closed
+  bool lastDoorStatus = 0;
   bool doorError = 0; //if repeated attempts to close door don't work, this bit is set and no more attempts are made
   bool autoCloseEnable = 1; //1 = enabled , 0 = disabled
   int i;  //for loops
@@ -76,7 +78,7 @@ void loop() {
   checkRequests();
 
   //Read the sensors that get updated every loop
-  doorStatus = !digitalRead(doorStatusPin);
+  checkDoor();
   
   //See if it's time to update the sensors that only update periodically
   if(tempUpdateCountdown == 0) //don't update the temperature sensors every loop because it take too long
@@ -90,6 +92,7 @@ void loop() {
     tempUpdateCountdown = (tempUpdateDelay * loopsPerSecond) + 1;
     CPUTemp = getCPUTemp();
 // Turn off the status light
+ //   sendAllData();//Send all data to the serial port
     digitalWrite(statusLight, LOW);
 
   }
@@ -117,7 +120,7 @@ void loop() {
       }
   
     //Update door status
-    doorStatus = !digitalRead(doorStatusPin);
+    checkDoor();
     if(doorStatus)//true if door is closed
     {
       digitalWrite(statusLight, LOW);
@@ -181,7 +184,7 @@ void loop() {
       }
 
       //Serial.println("checking door status");
-     doorStatus = !digitalRead(doorStatusPin); //check the door status pin
+      checkDoor();
         
      if(doorStatus == 1) // door successfully closed, go back to monitoring
      {
@@ -215,8 +218,7 @@ void loop() {
         }
       }
 
-      doorStatus = !digitalRead(doorStatusPin); // check the door status again
-       
+      checkDoor();       
      if(doorStatus == 1) // door successfully closed, go back to monitoring
      {
        //Serial.println("Door close successful on second attempt");
@@ -294,8 +296,9 @@ void commandReply()
 
   if(commandReq == grge_requestDoorStatus) //command is to return door status 0 = open, 1 = closed
       {
-        doorStatus = !digitalRead(doorStatusPin); //make sure to send a current value
 
+        checkDoor();
+        
         Serial.print("GS");//send command reply prefix  
         if(doorError)
         {
@@ -400,6 +403,11 @@ void commandReply()
     return;
   }
   
+  if (commandReq = broadcast_sendAll)
+  {
+ //   sendAllData();
+    return;
+  }
     
 //  Serial.print("!");//reply for unimplemented commands
     return;
@@ -407,5 +415,43 @@ void commandReply()
 }
 
 
+void checkDoor()//This function checks the door status and sends a message on serial port if it has changed since last check
+{
+   lastDoorStatus = doorStatus;
+  doorStatus = !digitalRead(doorStatusPin);
+  if(doorStatus != lastDoorStatus)//door status has changed, send an alert via serial port
+  {
+   Serial.print(garage_doorStatus);
+   Serial.print(doorStatus);
+  } 
+}
+
+void sendAllData() //Send out the most recent data from all sensors
+{
+   Serial.print(garage_doorStatus);
+   Serial.print(doorStatus);
+ /* 
+   Serial.print('&');
+   Serial.print(garage_tempZone1);
+   Serial.print(tempZone1);
+   Serial.print('!');
+
+   Serial.print('&');
+   Serial.print(garage_tempZone2);
+   Serial.print(tempZone2);
+   Serial.print('!');
+
+   Serial.print('&');
+   Serial.print(garage_error);
+   Serial.print(doorError);
+   Serial.print('!');
+
+   Serial.print('&');
+   Serial.print(garage_autoCloseEnabled);
+   Serial.print(autoCloseEnable);
+   Serial.print('!');
+   */
+   return; 
+}
 
 

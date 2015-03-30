@@ -1,3 +1,6 @@
+//GENERAL COMMANDS
+  #define broadcast_sendAll				  '#' //#
+
 //CONTROLLER COMMANDS
   #define ctrl_requestFWVer              'K' //K
   #define ctrl_requestTemp               'L' //L
