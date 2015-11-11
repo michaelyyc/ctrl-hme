@@ -37,7 +37,7 @@
 #include <commandDefinitionsAlt.h>
 #include <XBEEDataIdentifiers.h>
 #include <privatePasswordFile.h>
-//#include "plotly_streaming_ethernet.h"
+#include "plotly_streaming_ethernet.h"
 
 
 //Defines
@@ -74,10 +74,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.78 // FW version
-// NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
-// until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
-
+#define FWversion                  0.76 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
 //#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
@@ -136,7 +133,7 @@ DateTime lastUpdateTime;
 int lastLogMinute; //used to keep track of SD card logging and log only once per minute
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
-float tempMainFloor = -127.0; //value used to store ambient temperature on the main floor
+float tempAmbient = -127.0; //value used to store ambient temperature as measured by 1-wire sensor
 Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
 //float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
@@ -194,7 +191,7 @@ float bedroomFirmware = -1;
 float masterBedroomTemperature = -127.0;
 float masterBedroomTemperatureSetPoint = 17.0;
 float backBedroomTemperature = -127.0;
-//float frontBedroomTemperature = -127.0;
+float frontBedroomTemperature = -127.0;
 bool bedroomMaintainTemp = false;
 bool bedroomHeaterStatus = false;
 
@@ -422,7 +419,7 @@ void loop()
         {
           commandSent = true; //set the commandSent variable true so it is't sent again this loop
           server.print(F("Main Floor Temperature: "));
-          server.print(tempMainFloor);
+          server.print(tempAmbient);
           server.print(F(" 'C"));
           server.write(newLine);//new line
           server.write(carriageReturn);
@@ -1033,14 +1030,14 @@ void controlFurnace()
   }
 
 
-  //Control furnace by sending commands to the basement node based on tempMainFloor
+  //Control furnace by sending commands to the basement node based on tempAmbient
 
-  if(tempMainFloor == (-127.0 + tempOffset) || tempMainFloor == (0.0 + tempOffset))
+  if(tempAmbient == (-127.0 + tempOffset) || tempAmbient == (0.0 + tempOffset))
   {
       return;//Don't act on bad values - do nothing
   }
       //turn the furnace off if necessary
-      if(tempMainFloor > (tempSetPoint + tempHysterisis))
+      if(tempAmbient > (tempSetPoint + tempHysterisis))
       {
         furnaceStatus = false;//prevent furnace from turning on in the next loop
         Serial1.print(bsmt_turnFurnaceOff);
@@ -1054,12 +1051,12 @@ void controlFurnace()
 
 
       // turn the furnace on if necessary
-      if(furnaceStatus || (tempMainFloor < (tempSetPoint - tempHysterisis)))
+      if(furnaceStatus || (tempAmbient < (tempSetPoint - tempHysterisis)))
       {
         furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
-//        Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
+        Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
 //        server.print(F("sent ON command to basement node "));
-//        server.print(tempMainFloor);
+//        server.print(tempAmbient);
 //        server.print(F(" 'C "));
         if(boolFromSerial1())
           {
@@ -1090,9 +1087,9 @@ void controlVentFan()
          return;
       }
       
-      if(ventFanAutoEnabled && (tempMainFloor > tempSetPoint + tempHysterisis))
+      if(ventFanAutoEnabled && (tempAmbient > tempSetPoint + tempHysterisis))
       {
-        if((garageTempOutdoor - 1.0) < tempMainFloor)//the fan should only be on if it's colder outside than inside
+        if((garageTempOutdoor - 1.0) < tempAmbient)//the fan should only be on if it's colder outside than inside
         {
          Serial1.print(bsmt_turnFanOn);
          ventFanStatus = boolFromSerial1();  
@@ -1100,7 +1097,7 @@ void controlVentFan()
         }
       }
       
-      if(ventFanAutoEnabled && (tempMainFloor < tempSetPoint - tempHysterisis))
+      if(ventFanAutoEnabled && (tempAmbient < tempSetPoint - tempHysterisis))
       {
        Serial1.print(bsmt_turnFanOff);
        ventFanStatus = !boolFromSerial1(); 
@@ -1124,7 +1121,7 @@ void controlBedroomHeater()
   }
 
 
-  //Control furnace by sending commands to the bedroom node based on tempMainFloor
+  //Control furnace by sending commands to the bedroom node based on tempAmbient
 
   if(masterBedroomTemperature == -127.0 || masterBedroomTemperature == 0.0)
   {
@@ -1156,7 +1153,7 @@ void controlBedroomHeater()
         Serial.print("Sent ");
         Serial.println(bdrm_requestActivate120V1);
 //        server.print(F("sent ON command to bedroom node "));
-//        server.print(tempMainFloor);
+//        server.print(tempAmbient);
 //        server.print(F(" 'C "));
         if(boolFromSerial1())
           {
@@ -1508,13 +1505,13 @@ void sendStatusReport()
       server.write(newLine);//new line
       server.write(carriageReturn);
       server.print(F("Main Floor:     "));
-      server.print(tempMainFloor);
+      server.print(tempAmbient);
       server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-//      server.print(F("Front Bedroom:  "));
-//      server.print(frontBedroomTemperature);
+      server.print(F("Front Bedroom:  "));
+      server.print(frontBedroomTemperature);
       server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
@@ -1620,8 +1617,8 @@ void getPeriodicUpdates()
     server.print(F("Updating sensor data..."));
   
    
-//    tempMainFloor = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
-//    frontBedroomTemperature = readAmbientTemp();
+    tempAmbient = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
+    frontBedroomTemperature = readAmbientTemp();
     Serial1.flush();//flush serial buffer
 
     //Get updates from the garage node
@@ -2143,14 +2140,14 @@ void sendToPlotly()
     if(garageDoorStatus != -1111)
       graph.plot(millis(), garageDoorStatus, tokens[0]);
     
-    graph.plot(millis(), tempMainFloor, tokens[1]);
+    graph.plot(millis(), tempAmbient, tokens[1]);
     graph.plot(millis(), tempSetPoint, tokens[2]);
     graph.plot(millis(), maintainTemperature, tokens[3]);    
     graph.plot(millis(), furnaceStatus, tokens[4]);
     graph.plot(millis(), ventFanForceOn, tokens[5]);
     graph.plot(millis(), ventFanAutoEnabled, tokens[6]);
     graph.plot(millis(), ventFanStatus, tokens[7]);   
-//    graph.plot(millis(), frontBedroomTemperature, tokens[8]);
+    graph.plot(millis(), frontBedroomTemperature, tokens[8]);
     graph.plot(millis(), backBedroomTemperature, tokens[9]);
     graph.plot(millis(), masterBedroomTemperature, tokens[10]);    
     graph.plot(millis(), masterBedroomTemperatureSetPoint, tokens[11]);
@@ -2217,7 +2214,7 @@ void saveToSDCard()
   //add data variables here
   dataString += String(garageDoorStatus);
   dataString += ",";
-  dataString += String(tempMainFloor);
+  dataString += String(tempAmbient);
   dataString += ",";
   dataString += String(tempSetPoint);
   dataString += ",";
@@ -2230,8 +2227,8 @@ void saveToSDCard()
   dataString += String(ventFanAutoEnabled);
   dataString += ",";
   dataString += String(ventFanStatus);
-//  dataString += ",";
-//  dataString += String(frontBedroomTemperature);
+  dataString += ",";
+  dataString += String(frontBedroomTemperature);
   dataString += ",";
   dataString += String(backBedroomTemperature);
   dataString += ",";
@@ -2286,7 +2283,7 @@ void writeHeaderToSDCard()
   //add data variables here
   dataString += String("garageDoorStatus");
   dataString += ",";
-  dataString += String("tempMainFloor");
+  dataString += String("tempAmbient");
   dataString += ",";
   dataString += String("tempSetPoint");
   dataString += ",";
@@ -2299,8 +2296,8 @@ void writeHeaderToSDCard()
   dataString += String("ventFanAutoEnabled");
   dataString += ",";
   dataString += String("ventFanStatus");
-//  dataString += ",";
-//  dataString += String("frontBedroomTemperature");
+  dataString += ",";
+  dataString += String("frontBedroomTemperature");
   dataString += ",";
   dataString += String("backBedroomTemperature");
   dataString += ",";
@@ -2591,4 +2588,3 @@ void readSerial()
 
 
 }
-
