@@ -1515,9 +1515,9 @@ void sendStatusReport()
 
 //      server.print(F("Front Bedroom:  "));
 //      server.print(frontBedroomTemperature);
-      server.print(F(" 'C"));
-      server.write(newLine);//new line
-      server.write(carriageReturn);
+//      server.print(F(" 'C"));
+//      server.write(newLine);//new line
+//      server.write(carriageReturn);
 
       server.print(F("Back Bedroom:   "));
       server.print(backBedroomTemperature);
