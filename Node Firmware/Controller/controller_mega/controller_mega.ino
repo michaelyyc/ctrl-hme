@@ -74,7 +74,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.78 // FW version
+#define FWversion                  0.80 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -137,6 +137,7 @@ int lastLogMinute; //used to keep track of SD card logging and log only once per
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
 float tempMainFloor = -127.0; //value used to store ambient temperature on the main floor
+float tempMainFloorOffset = 0.8; //Apply this to the main floor temperature since it's in the living room instead of the hallway
 Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
 //float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
@@ -194,7 +195,6 @@ float bedroomFirmware = -1;
 float masterBedroomTemperature = -127.0;
 float masterBedroomTemperatureSetPoint = 17.0;
 float backBedroomTemperature = -127.0;
-//float frontBedroomTemperature = -127.0;
 bool bedroomMaintainTemp = false;
 bool bedroomHeaterStatus = false;
 
@@ -1513,12 +1513,6 @@ void sendStatusReport()
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-//      server.print(F("Front Bedroom:  "));
-//      server.print(frontBedroomTemperature);
-//      server.print(F(" 'C"));
-//      server.write(newLine);//new line
-//      server.write(carriageReturn);
-
       server.print(F("Back Bedroom:   "));
       server.print(backBedroomTemperature);
       server.print(F(" 'C"));
@@ -1619,9 +1613,6 @@ void getPeriodicUpdates()
     if(validPassword) //only output this if someone is logged in successfully
     server.print(F("Updating sensor data..."));
   
-   
-//    tempMainFloor = readAmbientTemp() + tempOffset; // will be different once a separate sensor is installed in main floor open area.
-//    frontBedroomTemperature = readAmbientTemp();
     Serial1.flush();//flush serial buffer
 
     //Get updates from the garage node
@@ -1647,6 +1638,9 @@ void getPeriodicUpdates()
     basementTempAmbient = floatFromSerial1('!');
     Serial1.print(bsmt_requestTempZone2);
     backBedroomTemperature = floatFromSerial1('!');
+    Serial1.print(bsmt_requestTempZone3);
+    tempMainFloor = floatFromSerial1('!') + tempMainFloorOffset;
+    
     
     //Get updates from the bedroom node
     Serial1.print(bdrm_requestTemp);
@@ -2150,7 +2144,6 @@ void sendToPlotly()
     graph.plot(millis(), ventFanForceOn, tokens[5]);
     graph.plot(millis(), ventFanAutoEnabled, tokens[6]);
     graph.plot(millis(), ventFanStatus, tokens[7]);   
-//    graph.plot(millis(), frontBedroomTemperature, tokens[8]);
     graph.plot(millis(), backBedroomTemperature, tokens[9]);
     graph.plot(millis(), masterBedroomTemperature, tokens[10]);    
     graph.plot(millis(), masterBedroomTemperatureSetPoint, tokens[11]);
@@ -2230,8 +2223,6 @@ void saveToSDCard()
   dataString += String(ventFanAutoEnabled);
   dataString += ",";
   dataString += String(ventFanStatus);
-//  dataString += ",";
-//  dataString += String(frontBedroomTemperature);
   dataString += ",";
   dataString += String(backBedroomTemperature);
   dataString += ",";
@@ -2299,8 +2290,6 @@ void writeHeaderToSDCard()
   dataString += String("ventFanAutoEnabled");
   dataString += ",";
   dataString += String("ventFanStatus");
-//  dataString += ",";
-//  dataString += String("frontBedroomTemperature");
   dataString += ",";
   dataString += String("backBedroomTemperature");
   dataString += ",";
