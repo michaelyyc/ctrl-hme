@@ -18,7 +18,7 @@ Furnace and fan can both be controlled by remote command
 
 
   //I/O pin definitions
-  #define furnaceControlRelay         3 // controls heat on furnace
+  #define furnaceControlRelay         7 // controls heat on furnace
   #define fanControlRelay             4 // controls ventillation fan on furnace
   #define oneWireBus1                 2 // temperature sensor for zone 1 (basement)
   #define oneWireBus2                 5 // temperature sensor for zone 2 (back bedroom)
@@ -26,7 +26,7 @@ Furnace and fan can both be controlled by remote command
   #define statusLight                13 // Status light on PCB
   
   //Constants
-  #define FWversion            0.52
+  #define FWversion            0.53
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
   #define tempUpdateDelay        30 //how many seconds (approx) between updates of the temperature sensors
