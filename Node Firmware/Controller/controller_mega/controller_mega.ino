@@ -92,7 +92,7 @@
 //ASCII values
 #define newLine                      10 // ASCII NEW LINE
 #define carriageReturn               13 // ASCII Carriage return
-#define tempOffset                   -0.4 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
+#define tempMainFloorOffset          +0.9 //offset in degrees C to make controller ambient temp agree with thermostat at centre of house
 #define chipSelect                   4 //Chip select for the SD card used to store log data
 
 
@@ -137,7 +137,6 @@ int lastLogMinute; //used to keep track of SD card logging and log only once per
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
 float tempMainFloor = -127.0; //value used to store ambient temperature on the main floor
-float tempMainFloorOffset = 0.8; //Apply this to the main floor temperature since it's in the living room instead of the hallway
 Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
 //float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
@@ -1035,7 +1034,7 @@ void controlFurnace()
 
   //Control furnace by sending commands to the basement node based on tempMainFloor
 
-  if(tempMainFloor == (-127.0 + tempOffset) || tempMainFloor == (0.0 + tempOffset))
+  if(tempMainFloor == (-127.0 + tempMainFloorOffset) || tempMainFloor == (0.0 + tempMainFloorOffset))
   {
       return;//Don't act on bad values - do nothing
   }
@@ -1057,7 +1056,7 @@ void controlFurnace()
       if(furnaceStatus || (tempMainFloor < (tempSetPoint - tempHysterisis)))
       {
         furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
-//        Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
+        Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
 //        server.print(F("sent ON command to basement node "));
 //        server.print(tempMainFloor);
 //        server.print(F(" 'C "));
