@@ -74,7 +74,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.80 // FW version
+#define FWversion                  0.81 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -82,7 +82,7 @@
 #define tempMinimumAllowed         15.0 //minimum temperature
 //#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
 //#define blockHeaterOffHour           20 //hour to turn the block heater off automatically
-#define blockHeaterMaxTemp           -4 //maximum temperature INSIDE garage for block heater use
+#define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected

@@ -87,12 +87,38 @@ void loop() {
   {
 //set the status light on while checking
     digitalWrite(statusLight, HIGH);
+    
+    //Get temperature from sensor 1, ask again if value returned is invalid
+    //TO-DO : add logging for sensor read re-try and move retry into the requestTemperatures() function    
+
     sensors1.requestTemperatures();
     tempAmbient = sensors1.getTempCByIndex(0);
+    if(tempAmbient == 85.0 || tempAmbient == -127.0)
+    {
+    delay(75);
+    sensors1.requestTemperatures();
+    tempAmbient = sensors1.getTempCByIndex(0);      
+    }
+    
     sensors2.requestTemperatures();
     tempZone2 = sensors2.getTempCByIndex(0);
+    if(tempZone2 == 85.0 || tempZone2 == -127.0) //retry one time if bad value is read
+    {
+    delay(75);
+    sensors2.requestTemperatures();
+    tempZone2 = sensors2.getTempCByIndex(0);      
+    }    
+        
     sensors3.requestTemperatures();
     tempZone3 = sensors3.getTempCByIndex(0);
+    if(tempZone3 == 85.0 || tempZone3 == -127.0) //retry one time if bad value is read
+    {
+    delay(75);
+    sensors3.requestTemperatures();
+    tempZone3 = sensors3.getTempCByIndex(0);      
+    }    
+    
+    
     tempUpdateCountdown = (tempUpdateDelay * loopsPerSecond) + 1;
     CPUTemp = getCPUTemp();
 // Turn off the status light
