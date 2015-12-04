@@ -45,14 +45,14 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.82 // FW version
+#define FWversion                  0.83 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
-//#define blockHeaterOnHour             4 //hour in the morning to automatically turn on block heater
-//#define blockHeaterOffHour           20 //hour to turn the block heater off automatically
+//#define blockHeaterOnHour           4 //hour in the morning to automatically turn on block heater
+//#define blockHeaterOffHour         20 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
@@ -96,6 +96,9 @@ DateTime now; //variable to store the current date & time from the RTC
 DateTime startup; //store the power-on time for calculating up-time
 DateTime lastUpdateTime;
 int lastLogMinute; //used to keep track of SD card logging and log only once per minute
+int furnaceOnDuration = 0;
+int furnaceDailyRunTime = 0;
+int furnaceTotalRunTime = 0;
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
 Password password = Password(MichaelPassword); //The password is contained in a private header file
@@ -393,6 +396,8 @@ void loop()
           maintainTemperature = false;
           EEPROM.write(EEPROM_maintainTemperature, 0);
           furnaceStatus = false;
+          furnaceDailyRunTime += furnaceOnDuration;
+          furnaceOnDuration = 0;
           Serial1.print(bsmt_turnFurnaceOff);
           if(!boolFromSerial1())
           {
@@ -990,6 +995,8 @@ void controlFurnace()
       if(mainFloorAvgTemp > (tempSetPoint + tempHysterisis))
       {
         furnaceStatus = false;//prevent furnace from turning on in the next loop
+        furnaceDailyRunTime += furnaceOnDuration;
+        furnaceOnDuration = 0;
         Serial1.print(bsmt_turnFurnaceOff);
         if(!boolFromSerial1())
         {
@@ -1005,7 +1012,10 @@ void controlFurnace()
       {
         furnaceStatus = true;//used for hysterisis when the second part of the IF condition is no longer true
         Serial1.print(bsmt_turnFurnaceOn);//this command must be repeated at least every 5 minutes or the furnace will automatically turn off (see firmware for basement node)
-
+        if(lastLogMinute != now.minute())
+        {
+            furnaceOnDuration++;
+          }
         if(boolFromSerial1())
           {
 //            server.print(F("ACK"));
@@ -1373,17 +1383,22 @@ void sendStatusReport()
 
         if(furnaceStatus)
         {
-          server.print(F("ON"));
-          server.write(newLine);
-          server.write(carriageReturn);
+          server.print(F("ON ("));
+          server.print(furnaceOnDuration);
+          server.print(F("m now, "));
         }
         else
         {
-          server.print(F("OFF"));
-          server.write(newLine);
-          server.write(carriageReturn);
+          server.print(F("OFF ("));
         }
-  
+        server.print(furnaceDailyRunTime + furnaceOnDuration);
+        server.print(F("m today, "));
+        server.print(furnaceTotalRunTime + furnaceDailyRunTime + furnaceOnDuration);
+        server.print(F("m since reboot)"));
+        server.write(newLine);
+        server.write(carriageReturn);
+        
+          
         server.print(F("Ventillation Fan is "));
 
         if(ventFanStatus)
@@ -1449,13 +1464,13 @@ void sendStatusReport()
         server.print(F("TEMPERATURES"));
       server.write(newLine);//new line
       server.write(carriageReturn);
-      server.print(F("Main Floor avg :"));
+      server.print(F("Main Floor avg: "));
       server.print(mainFloorAvgTemp);
       server.print(F(" 'C"));
       server.write(newLine);//new line
       server.write(carriageReturn);
 
-      server.print(F("Living Bedroom: "));
+      server.print(F("Living room:    "));
       server.print(livingRoomTemperature);
       server.print(F(" 'C"));
       server.write(newLine);//new line
@@ -1648,6 +1663,12 @@ void getPeriodicUpdates()
     controlVentFan();
 
     now = rtc.now();//read time from the RTC
+    if(now.minute() == 0 && now.hour() == 0)
+    {
+      //it's a new day!
+      furnaceTotalRunTime += furnaceDailyRunTime;
+      furnaceDailyRunTime = 0;
+    }
 
     lastUpdateTime = now.unixtime();//update the timer for periodic updates
     
