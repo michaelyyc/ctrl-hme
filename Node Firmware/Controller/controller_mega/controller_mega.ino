@@ -45,7 +45,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.83 // FW version
+#define FWversion                  0.84 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -115,6 +115,7 @@ bool validPassword = false; //This is true any time a valid user is logged in
 bool commandSent = false; //this tracks whether the controller has already relayed the command to the network, prevents sending it twice
 bool SDCardLog = false; //We only attempt to write to the SD card if this is true
 unsigned long timeOfLastInput = 0;//this is used to determine if the client interaction has timed out
+String dataString = ""; //datastring for the ctrl_sendAllData command, and logging to SD card
 
 //Variables for Automatic Thermostat [weekdays]
 int thermostatWeekdayTimePeriod1msmStart; //system on time in the morning
@@ -259,7 +260,11 @@ void loop()
     // Typing errors can be cleared by sending '!'
     // If the password is wrong, the client will be disconnected and server will wait
     // for ~30 seconds before allowing new connections
-    server.print(F("Enter password: "));
+   
+   
+   // server.print(F("Enter password: "));
+   validPassword = true;
+   
     while(!validPassword && client.connected())
     {
 
@@ -267,6 +272,11 @@ void loop()
       readSerial();
       
       if(client.available())
+      {
+        //THIS IS USED TO BYPASS THE PASSWORD REQUIREMENT - SINCE I'M NOW ACCESSING ONLY THROUGH SSH ON RASPBERRY PI
+        validPassword = true;
+      }
+/*
       {
         inputChar = client.read();
         timeOfLastInput = millis();//set the time of last Input to NOW
@@ -312,14 +322,15 @@ void loop()
         password.reset();
         timeOfLastInput = millis();
       }
-
+*/
     }//End of while(!validPassword)
 
 
     //WELCOME MESSAGE - Displayed only at start of session
     if(validPassword)
     {
-      sendStatusReport();
+      server.print("CONNECT");
+      //      sendStatusReport();
     }
  
       // Check if any messages ahve arrived from the XBEE nodes
@@ -635,6 +646,12 @@ void loop()
 	server.write(newLine);//new line
 	server.write(carriageReturn);
   }
+  
+        if(inputChar == ctrl_sendAllData)
+        {
+           server.print(dataString); 
+           commandSent = true;
+        }
 
 /*
         //Defined commands not handled by this node
@@ -1573,28 +1590,28 @@ void getPeriodicUpdates()
 {
     //Get a reading from the controller's built in 1-wire temperature sensor
 
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F("Updating sensor data..."));
+//   if(validPassword) //only output this if someone is logged in successfully
+//   server.print(F("Updating sensor data..."));
   
     Serial1.flush();//flush serial buffer
 
     //Get updates from the garage node
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F("outdoor "));
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(F("outdoor "));
     Serial1.print(grge_requestTempZone2); //relay the command to the serial port
     garageTempOutdoor = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(garageTempOutdoor);
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(garageTempOutdoor);
     
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" garage "));
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(F(" garage "));
     Serial1.print(grge_requestTempZone1);
     garageTempAmbient = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(garageTempAmbient);
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(garageTempAmbient);
 
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" door "));
+//  if(validPassword) //only output this if someone is logged in successfully
+//  server.print(F(" door "));
     Serial1.print(grge_requestDoorStatus);
     garageDoorStatus = boolIntFromSerial1();
     if(garageDoorStatus == -1111)//no response from garage node
@@ -1607,50 +1624,50 @@ void getPeriodicUpdates()
       }
     }
     digitalWrite(garageDoorStatusPin, garageDoorStatus);
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(garageDoorStatus);
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(garageDoorStatus);
 
 
     //Get updates from the basement node
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" Basement "));
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(F(" Basement "));
     Serial1.print(bsmt_requestTemp);
     basementTempAmbient = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(basementTempAmbient);
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" Back Bedroom "));
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(basementTempAmbient);
+//    if(validPassword) //only output this if someone is logged in successfully
+//    server.print(F(" Back Bedroom "));
     Serial1.print(bsmt_requestTempZone2);
     backBedroomTemperature = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(backBedroomTemperature);
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" Living Room "));
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(backBedroomTemperature);
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(F(" Living Room "));
     Serial1.print(bsmt_requestTempZone3);
     livingRoomTemperature = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(livingRoomTemperature);
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(livingRoomTemperature);
     
     //Get updates from the bedroom node
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" Master Bedroom "));
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(F(" Master Bedroom "));
     Serial1.print(bdrm_requestTemp);
     masterBedroomTemperature = floatFromSerial1('!');
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(masterBedroomTemperature);
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(masterBedroomTemperature);
 
     //average the temperature from ndoes that reported
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(F(" main floor "));
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(F(" main floor "));
     mainFloorAvgTemp = averageValuesInRange(5.0, 40.0, backBedroomTemperature, livingRoomTemperature, masterBedroomTemperature);
-    if(validPassword) //only output this if someone is logged in successfully
-    server.print(mainFloorAvgTemp);
+ //   if(validPassword) //only output this if someone is logged in successfully
+ //   server.print(mainFloorAvgTemp);
     
     //Perform time-triggered actions
     disableBedroomHeaterOnTimer(); //Disable bedroom heater at pre-defined time
     automaticTempSetPoint(); //set the temperature set point based on day and time
-     if(validPassword) //only output this if someone is logged in successfully
-   server.print(F(" Taking Actions ... "));
+ //    if(validPassword) //only output this if someone is logged in successfully
+ //  server.print(F(" Taking Actions ... "));
     if(maintainTemperature)
           controlFurnace();
 
@@ -1673,12 +1690,12 @@ void getPeriodicUpdates()
     lastUpdateTime = now.unixtime();//update the timer for periodic updates
     
     
-    if(validPassword) //only output this if someone is logged in successfully
+   /* if(validPassword) //only output this if someone is logged in successfully
   {
     server.print(F("Done"));
     server.write(newLine);
     server.write(carriageReturn);
-  }
+  }*/
 }
 
 float averageValuesInRange(float minimum, float maximum, float temp1, float temp2, float temp3)
@@ -2179,8 +2196,9 @@ void saveToSDCard()
   }
 
 
-  //make a string for assembling the data to log
-  String dataString = "";
+  //empty the dataString before assembling the data to log
+  dataString = "";
+  
   dataString += now.year();
     dataString += "-";
   if(now.month() < 10)
@@ -2246,12 +2264,10 @@ void saveToSDCard()
   dataString += ",";
   dataString += String(validPassword);
 
-
-
   //End of data variables
 
   dataFile.println(dataString);
-  Serial.println(dataString);
+  Serial.println(dataString);//used for debugging
   dataFile.close();
 
 }

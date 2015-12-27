@@ -1,6 +1,3 @@
-//GENERAL COMMANDS
-  #define broadcast_sendAll				  '#' //#
-
 //CONTROLLER COMMANDS
   #define ctrl_requestFWVer              'K' //K
   #define ctrl_requestTemp               'L' //L
@@ -23,6 +20,7 @@
   #define ctrl_toggleThermostatSchedule  't' //t
   #define ctrl_telnetSerialRelay		 '!' //!
   #define ctrl_triggerUpdatesNow		 '#' //#
+  #define ctrl_sendAllData               '@' //@
 
 
 //BASEMENT COMMANDS
