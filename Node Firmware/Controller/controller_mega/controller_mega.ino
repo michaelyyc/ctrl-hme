@@ -53,7 +53,7 @@
 #define tempMinimumAllowed         15.0 //minimum temperature
 //#define blockHeaterOnHour           4 //hour in the morning to automatically turn on block heater
 //#define blockHeaterOffHour         20 //hour to turn the block heater off automatically
-#define blockHeaterMaxTemp           -7 //maximum temperature INSIDE garage for block heater use
+#define blockHeaterMaxTemp           -1 //maximum temperature INSIDE garage for block heater use
 #define garageDoorStatusPin           9 //This pin is high when the garage door is closed
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
@@ -1836,8 +1836,8 @@ void programThermostat()
           thermostatWeekdayTimePeriod1msmStart = programThermostatmsm(EEPROM_thermostatWeekdayTimePeriod1HourStart, EEPROM_thermostatWeekdayTimePeriod1MinuteStart);
           thermostatWeekdayTimePeriod1SetPoint = programThermostatSetPoint(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
             bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
-            blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
-            blockHeaterOffHour = bedroomHeaterAutoOffHour + 4;
+            blockHeaterOnHour = bedroomHeaterAutoOffHour;
+            blockHeaterOffHour = bedroomHeaterAutoOffHour + 2;
             programThermostatDisplaySettings();
 
           break;
@@ -2136,8 +2136,8 @@ void programThermostatRestoreFromEEPROM()
   //make sure that the EEPROM doesn't have any blank values in the range where the
   //thermostat settings should be stored
   bedroomHeaterAutoOffHour = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart);
-  blockHeaterOnHour = bedroomHeaterAutoOffHour - 2;
-  blockHeaterOffHour = bedroomHeaterAutoOffHour + 4;
+  blockHeaterOnHour = bedroomHeaterAutoOffHour;
+  blockHeaterOffHour = bedroomHeaterAutoOffHour + 2;
   
   thermostatWeekdayTimePeriod1msmStart = minutesSinceMidnight(EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1HourStart), EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1MinuteStart));
   thermostatWeekdayTimePeriod1SetPoint = EEPROM.read(EEPROM_thermostatWeekdayTimePeriod1SetPoint);
