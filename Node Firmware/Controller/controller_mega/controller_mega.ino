@@ -45,7 +45,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.84 // FW version
+#define FWversion                  0.85 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -126,9 +126,6 @@ int thermostatWeekdayTimePeriod3msmStart; //heat up before we get home from work
 float thermostatWeekdayTimePeriod3SetPoint;
 int thermostatWeekdayTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekdayTimePeriod4SetPoint;
-int bedroomHeaterAutoOffHour;      //automatically turn off the bedroom heater at this time
-int blockHeaterOnHour = 4; //this updates based on thermostatWeekdayTimePeriod1msmStart
-int blockHeaterOffHour = 9; //this updates based on thermostatWeekdayTimePeriod1msmStart
 
 //Variables for the automatic Thermostat [weekends]
 int thermostatWeekendTimePeriod1msmStart; //system on-time in the morning
@@ -141,6 +138,12 @@ int thermostatWeekendTimePeriod4msmStart; //turn down when going to bed
 float thermostatWeekendTimePeriod4SetPoint;
 
 float mainFloorAvgTemp = 0.0;
+
+
+int bedroomHeaterAutoOffHour;      //automatically turn off the bedroom heater at this time
+int blockHeaterOnHour = 4; //this updates based on thermostatWeekdayTimePeriod1msmStart
+int blockHeaterOffHour = 9; //this updates based on thermostatWeekdayTimePeriod1msmStart
+
 
 //Global variables from the basement node
 float basementTempAmbient= -127.0; //value used to store basement temperature as measured from the basement node
@@ -171,7 +174,8 @@ void setup()
 {
   //Initialize the IO on this node
   pinMode(garageDoorStatusPin, OUTPUT);
-
+  pinMode(13, OUTPUT);
+  
   //Initialize the realtime clock
   Wire.begin();
   rtc.begin();
@@ -225,7 +229,8 @@ void setup()
 
   // start listening for clients
   server.begin();
-
+  
+  digitalWrite(13, HIGH);//turn on the light to indicate clients can now connect
 
 }
 
@@ -239,7 +244,7 @@ void loop()
   readSerial();
 
 
-  client = server.available();
+ // client = server.available();
 
   // clear the valid password flag from any previous user
   validPassword = false; // Should already be false, but just in case the last session didn't end cleanly
@@ -247,7 +252,7 @@ void loop()
   // if an incoming client connects, there will be bytes available to read:
 
   client = server.available();
-  if (client == true)
+  if (client)
   {
 
     //Found that the some telnet clients send 24-26 bytes of data once connection is established.
@@ -649,10 +654,24 @@ void loop()
   
         if(inputChar == ctrl_sendAllData)
         {
-           server.print(dataString); 
+          Serial.println("Received ctrl_sendAllData");
+          makeDataString();
+          server.print(dataString); 
            commandSent = true;
         }
+        
+        if(inputChar == ctrl_sendSchedule)
+        {
+           Serial.println("Received ctrl_sendSchedule");
 
+           for(i=0; i < 24; i++)
+           {
+            server.print(EEPROM.read(i)); 
+            if(i != 23)
+              server.print(",");
+           }
+           commandSent = true;
+        }
 /*
         //Defined commands not handled by this node
         //relay them and store results in variables in the controller
@@ -2196,74 +2215,7 @@ void saveToSDCard()
   }
 
 
-  //empty the dataString before assembling the data to log
-  dataString = "";
-  
-  dataString += now.year();
-    dataString += "-";
-  if(now.month() < 10)
-    dataString += "0";
-
-  dataString += now.month();
-    dataString += "-";
-  if(now.day() < 10)
-    dataString += "0";
-
-  dataString += now.day();
-  dataString += " ";
-    if(now.hour() < 10)
-    dataString += "0";
-  dataString += now.hour();
-    dataString += ":";
-      if(now.minute() < 10)
-    dataString += "0";
-  dataString += now.minute();
-    dataString += ":";
-      if(now.second() < 10)
-    dataString += "0";
-  dataString += now.second();
-  dataString += ",";
-  //add data variables here
-  dataString += String(garageDoorStatus);
-  dataString += ",";
-  dataString += String(mainFloorAvgTemp);
-  dataString += ",";
-  dataString += String(livingRoomTemperature);
-  dataString += ",";
-  dataString += String(tempSetPoint);
-  dataString += ",";
-  dataString += String(maintainTemperature);
-  dataString += ",";
-  dataString += String(furnaceStatus);
-  dataString += ",";
-  dataString += String(ventFanForceOn);
-  dataString += ",";
-  dataString += String(ventFanAutoEnabled);
-  dataString += ",";
-  dataString += String(ventFanStatus);
-  dataString += ",";
-  dataString += String(backBedroomTemperature);
-  dataString += ",";
-  dataString += String(masterBedroomTemperature);
-  dataString += ",";
-  dataString += String(masterBedroomTemperatureSetPoint);
-  dataString += ",";
-  dataString += String(bedroomMaintainTemp);
-  dataString += ",";
-  dataString += String(bedroomHeaterStatus);
-  dataString += ",";
-  dataString += String(basementTempAmbient);
-  dataString += ",";
-  dataString += String(garageTempAmbient);
-  dataString += ",";
-  dataString += String(garageTempOutdoor);
-  dataString += ",";
-  dataString += String(blockHeaterEnabled);
-  dataString += ",";
-  dataString += String(blockHeaterStatus);
-  dataString += ",";
-  dataString += String(validPassword);
-
+  makeDataString();
   //End of data variables
 
   dataFile.println(dataString);
@@ -2291,6 +2243,14 @@ void writeHeaderToSDCard()
   dataString += String("Time");
   dataString += ",";
   //add data variables here
+  dataString += String("uptimeSeconds");
+  dataString += ",";
+  dataString += String("furnaceRuntimeNow");
+  dataString += ",";
+  dataString += String("furnaceRuntimeToday");
+  dataString += ",";
+  dataString += String("furnaceRuntimeSinceReboot");
+  dataString += ",";  
   dataString += String("garageDoorStatus");
   dataString += ",";
   dataString += String("mainFloorAvgTemp");
@@ -2300,6 +2260,8 @@ void writeHeaderToSDCard()
   dataString += String("tempSetPoint");
   dataString += ",";
   dataString += String("maintainTemperature");
+  dataString += ",";
+  dataString += String("programmableThermostatEnabled");
   dataString += ",";
   dataString += String("furnaceStatus");
   dataString += ",";
@@ -2319,6 +2281,8 @@ void writeHeaderToSDCard()
   dataString += ",";
   dataString += String("bedroomHeaterStatus");
   dataString += ",";
+  dataString += String("bedroomHeaterAutoOffHour");
+  dataString += ",";
   dataString += String("basementTempAmbient");
   dataString += ",";
   dataString += String("garageTempAmbient");
@@ -2329,15 +2293,20 @@ void writeHeaderToSDCard()
   dataString += ",";
   dataString += String("blockHeaterStatus");
   dataString += ",";
+  dataString += String("blockHeaterOffHour");
+  dataString += ",";
+  dataString += String("blockHeaterOnHour");
+  dataString += ",";
+  dataString += String("blockHeaterMaxTemp");
+  dataString += ",";
   dataString += String("validPassword");
   dataString += ",";
   dataString += String("FWversion:");
   dataString += String(FWversion);
   //End of data variables
   dataFile.println(dataString);
-  Serial.println(dataString);
   dataFile.close();
-
+  Serial.println(dataString);
 }
 
 
@@ -2597,5 +2566,94 @@ void readSerial()
 	}
 
 
+}
+
+void makeDataString()
+{
+    //empty the dataString before assembling the data to log
+  dataString = "";
+  
+  dataString += now.year();
+    dataString += "-";
+  if(now.month() < 10)
+    dataString += "0";
+
+  dataString += now.month();
+    dataString += "-";
+  if(now.day() < 10)
+    dataString += "0";
+
+  dataString += now.day();
+  dataString += " ";
+    if(now.hour() < 10)
+    dataString += "0";
+  dataString += now.hour();
+    dataString += ":";
+      if(now.minute() < 10)
+    dataString += "0";
+  dataString += now.minute();
+    dataString += ":";
+      if(now.second() < 10)
+    dataString += "0";
+  dataString += now.second();
+  dataString += ",";
+  //add data variables here
+  dataString += String(now.unixtime() - startup.unixtime());
+  dataString += ",";
+  dataString += String(furnaceOnDuration);
+  dataString += ",";
+  dataString += String(furnaceDailyRunTime + furnaceOnDuration);
+  dataString += ",";
+  dataString += String(furnaceTotalRunTime + furnaceDailyRunTime + furnaceOnDuration);
+  dataString += ",";
+  dataString += String(garageDoorStatus);
+  dataString += ",";
+  dataString += String(mainFloorAvgTemp);
+  dataString += ",";
+  dataString += String(livingRoomTemperature);
+  dataString += ",";
+  dataString += String(tempSetPoint);
+  dataString += ",";
+  dataString += String(maintainTemperature);
+  dataString += ",";
+  dataString += String(programmableThermostatEnabled);
+  dataString += ",";
+  dataString += String(furnaceStatus);
+  dataString += ",";
+  dataString += String(ventFanForceOn);
+  dataString += ",";
+  dataString += String(ventFanAutoEnabled);
+  dataString += ",";
+  dataString += String(ventFanStatus);
+  dataString += ",";
+  dataString += String(backBedroomTemperature);
+  dataString += ",";
+  dataString += String(masterBedroomTemperature);
+  dataString += ",";
+  dataString += String(masterBedroomTemperatureSetPoint);
+  dataString += ",";
+  dataString += String(bedroomMaintainTemp);
+  dataString += ",";
+  dataString += String(bedroomHeaterStatus);
+  dataString += ",";
+  dataString += String(bedroomHeaterAutoOffHour);
+  dataString += ",";
+  dataString += String(basementTempAmbient);
+  dataString += ",";
+  dataString += String(garageTempAmbient);
+  dataString += ",";
+  dataString += String(garageTempOutdoor);
+  dataString += ",";
+  dataString += String(blockHeaterEnabled);
+  dataString += ",";
+  dataString += String(blockHeaterStatus);
+  dataString += ",";
+  dataString += String(blockHeaterOffHour);
+  dataString += ",";
+  dataString += String(blockHeaterOnHour);
+  dataString += ",";
+  dataString += String(blockHeaterMaxTemp);
+  dataString += ",";
+  dataString += String(validPassword);
 }
 

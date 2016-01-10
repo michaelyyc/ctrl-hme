@@ -21,7 +21,7 @@
   #define ctrl_telnetSerialRelay		 '!' //!
   #define ctrl_triggerUpdatesNow		 '#' //#
   #define ctrl_sendAllData               '@' //@
-
+  #define ctrl_sendSchedule				 '$' //$
 
 //BASEMENT COMMANDS
 //Commands from the controller
