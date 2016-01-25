@@ -36,7 +36,7 @@ while 1:
             tempSetPoint = tn.read_until(',',0.1)[:-1]
             maintainTemperature = tn.read_until(',',0.1)[:-1]
             programmableThermostatEnabled = tn.read_until(',',0.1)[:-1]
-			furnaceStatus = tn.read_until(',',0.1)[:-1]
+	    furnaceStatus = tn.read_until(',',0.1)[:-1]
             ventFanForceOn = tn.read_until(',',0.1)[:-1]
             ventFanAutoEnabled = tn.read_until(',',0.1)[:-1]
             ventFanStatus = tn.read_until(',',0.1)[:-1]

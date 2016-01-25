@@ -45,7 +45,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.85 // FW version
+#define FWversion                  0.86 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -1678,7 +1678,7 @@ void getPeriodicUpdates()
     //average the temperature from ndoes that reported
  //   if(validPassword) //only output this if someone is logged in successfully
  //   server.print(F(" main floor "));
-    mainFloorAvgTemp = averageValuesInRange(5.0, 40.0, backBedroomTemperature, livingRoomTemperature, masterBedroomTemperature);
+    mainFloorAvgTemp = averageValuesInRange(5.0, 40.0, /*backBedroomTemperature*/50, livingRoomTemperature, masterBedroomTemperature); // I used an out of range value instead of back bedroom so it's ignored
  //   if(validPassword) //only output this if someone is logged in successfully
  //   server.print(mainFloorAvgTemp);
     
