@@ -59,6 +59,8 @@ if response == "CONNECT":
         tn.write('t')
         response = tn.read_until("enabled",1)
         print(response)
+    else:
+        print("Schedule Already Enabled")
 
     
 

@@ -61,25 +61,31 @@ while 1:
             myfile = "/var/www/html/index.html"
 
             text_file = open(myfile, "w")
-            text_file.write("<HTML>" + '\n' + "<HEAD>" + '\n' + "<TITLE>Hello World</TITLE>" + '\n' + "</HEAD>" + '\n' + "<BODY>")
-            text_file.write('\n' + "Date-time: " + dateTime + '\n' + "<BR><BR>")
+            text_file.write("<HTML>" + '\n' + "<HEAD>" + '\n' + "<TITLE>Home Controller</TITLE>" + '\n' + "<meta http-equiv=\"refresh\" content=\"10\">" + '\n' + "</HEAD>" + '\n' + "<BODY bgcolor=\"#ACDBDA\">")
+            text_file.write("<strong>Furnace</strong><BR>")
             text_file.write("Furnace is: ")
             if(furnaceStatus == '0'):
-                text_file.write("OFF")
+                text_file.write("OFF" + '\n' + "<BR>")
             else:
-                text_file.write("ON")
+                text_file.write("ON" + '\n' + "<BR>")
+                text_file.write(furnaceRuntimeNow + " minutes Now ")
+
+            text_file.write(furnaceRuntimeToday + " minutes Today, " + furnaceRuntimeSinceReboot + " minutes since reboot" + '\n' + "<BR>")
+
+                
             if(maintainTemperature == '1'):
-            	text_file.write(" Set Point: " + tempSetPoint + '\n')
+            	text_file.write(" Set Point: " + tempSetPoint + '\n' + "<BR>")
             else:
         	text_file.write("Disabled" + '\n')
         		
-        	text_file.write("Thermostat Schedule: ")
-        	if(programmableThermostatEnabled == '1'):
-        		text_file.write("Enabled" + '\n')
-        	else:
-        		text_file.write("Disabled" + '\n')
-        		 
-            text_file.write("<BR><BR>Main Floor Temperature: " + mainFloorAvgTemp + " Set Point: " + tempSetPoint + '\n' + "<BR>")
+            text_file.write("Thermostat Schedule: ")
+            if(programmableThermostatEnabled == '1'):
+        	text_file.write("Enabled" + '\n')
+            else:
+        	text_file.write("Disabled" + '\n')
+
+            text_file.write("<BR><BR><strong>Main Floor</strong><BR>")		 
+            text_file.write("Main Floor Temperature: " + mainFloorAvgTemp + "<BR>")
             text_file.write("Living Room Temperature: " + livingRoomTemperature + '\n' + "<BR>")
             text_file.write("Master Bedroom Temperature: " + masterBedroomTemperature + " Set Point: " + masterBedroomTemperatureSetPoint + " HEATER: ")
             if bedroomHeaterStatus == '1':
@@ -87,10 +93,17 @@ while 1:
             else:
                 text_file.write("OFF")
             text_file.write('\n' + "<BR>")
-            text_file.write("Back Bedroom Temperature: " + backBedroomTemperature + '\n' + "<BR>")
-            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR>")
+            text_file.write("Back Bedroom Temperature: " + backBedroomTemperature + '\n' + "<BR><BR>")
+
+            text_file.write("<strong>Basement</strong><BR>")		 
+            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR><BR>")
+
+
+            text_file.write("<strong>Garage and Outdoor</strong><BR>")		 
             text_file.write("Garage Temperature: " + garageTempAmbient + '\n' + "<BR>")
             text_file.write("Outdoor Temperature: " + garageTempOutdoor + '\n' + "<BR>")
+
+        
             if garageDoorStatus == '0':
                 text_file.write("Garage Door is OPEN" + '\n' + "<BR>")
             else:
@@ -99,33 +112,51 @@ while 1:
             text_file.write("Block Heater: ")
             if(blockHeaterStatus == '1'):
         		text_file.write("ON")
-			else:
-        		if(blockHeaterEnabled == '1'):
-        			text_file.write("Scheduled")
-        			else:
-        			text_file.write("OFF")
-            
-		text_file.write("</BODY>" + '\n' + "</HTML>")
-        text_file.close()
-        print("Web Page Updated at " + dateTime),
+	    else:
+        	if(blockHeaterEnabled == '1'):
+        	    text_file.write("Scheduled")
+        	else:
+        	    text_file.write("OFF")
+
+            text_file.write("<BR><BR>" + '\n' + "<strong>Controls:</strong>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/openGarageDoor.html\">Open Garage Door</a>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/closeGarage.php\">Close Garage Door</a>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/homeMode.php\">Home Mode</a>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/awayMode.php\">Away Mode</a>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/setTempAuto.php\">Run Schedule</a>" + '\n' + "<BR>")
+	    text_file.write("<a href=\"protected/wakeUpServer.php\">Wake Up Server</a>" + '\n' + "<BR>")
+#           text_file.write("Maintain Bedroom Temp at 19'C" + '\n' + "<BR>")
+#           text_file.write("Bedroom heater off" + '\n' + "<BR>")
+#           text_file.write("Block Heater On" + '\n' + "<BR>")
+#           text_file.write("Block Heater Off / Timer Off" + '\n' + "<BR>")
+#           text_file.write("Block Heater Timer On" + '\n' + "<BR>")
+#           text_file.write("Vent Fan Off" + '\n' + "<BR>")
+#           text_file.write("Vent Fan On" + '\n' + "<BR>")
+
+            text_file.write('\n' + "<BR><BR>" + "Last Update: " + dateTime + '\n' + "<BR><BR>")
+                            
+            text_file.write("</BODY>" + '\n' + "</HTML>")
+            text_file.close()
+            print("Web Page Updated at " + dateTime),
+
+#        else:
+#            print("Telnet Server Timeout")
 
     else:
-    	print("Telnet Server Timeout")
+        print("Telnet connection failed")
 
-else:
-	print("Telnet connection failed")
+    tn.close()
 
-tn.close()
-print("Disconnected")
-if response =="CONNECT":
-	delay = 60
-else: #only wait 10 seconds for re-try if previous attempt failed
-	delay = 10
-while delay > 0:
-        if delay % 20 == 0:
-            print delay
-        delay = delay - 1
-        sleep(1)
+    print("Disconnected")
+    if response =="CONNECT":
+            delay = 10
+    else: #only wait 2 seconds for re-try if previous attempt failed
+            delay = 2
+    while delay > 0:
+            if delay % 2 == 0:
+                print delay
+            delay = delay - 1
+            sleep(1)
 
 
 

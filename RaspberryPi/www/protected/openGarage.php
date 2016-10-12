@@ -8,6 +8,7 @@ $command = "python /home/pi/Python/openGarage.py";
  
 header('Content-Type: text/html; charset=utf-8');
 echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />';
+echo '<meta http-equiv="refresh" content="3; url=../" />';
 echo "<style type='text/css'>
  body{
  background:#000;

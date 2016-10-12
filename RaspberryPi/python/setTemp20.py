@@ -26,9 +26,9 @@ if response == "CONNECT":
     tn.write('I')
     response = tn.read_until(':',1)
     print(response)
-    tn.write("20\r")
-    print("sent 20\r")
-    response = tn.read_until("20.00", 1)
+    tn.write("20.5\r")
+    print("sent 20.5\r")
+    response = tn.read_until("20.50", 1)
     print(response)
     
 

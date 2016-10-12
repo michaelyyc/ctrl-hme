@@ -4,10 +4,11 @@ $param1 = "first";
 $param2 = "second";
 $param3 = "third";
  
-$command = "python /home/pi/Python/setTemp20.py";
+$command = "python /home/pi/Python/setTemp17.py";
  
 header('Content-Type: text/html; charset=utf-8');
 echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />';
+echo '<meta http-equiv="refresh" content="3; url=../" />';
 echo "<style type='text/css'>
  body{
  background:#000;

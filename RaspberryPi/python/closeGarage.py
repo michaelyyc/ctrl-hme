@@ -59,6 +59,8 @@ if response == "CONNECT":
         tn.write('3\r')
         response = tn.read_until("door",1)
         print(response)
+    else:
+        print("Door already CLOSED")
 
     
 
