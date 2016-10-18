@@ -45,7 +45,7 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.86 // FW version
+#define FWversion                  0.87 // FW version
 // NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
 // until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
 
@@ -54,7 +54,7 @@
 //#define blockHeaterOnHour           4 //hour in the morning to automatically turn on block heater
 //#define blockHeaterOffHour         20 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -1 //maximum temperature INSIDE garage for block heater use
-#define garageDoorStatusPin           9 //This pin is high when the garage door is closed
+#define garageDoorStatusPin           9 //This pin is used to driver a beeper to indicate when the garage door opens/closes
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
 #define clientTimeoutLimit        90000 //number of milliseconds before assuming the client has disconnected
@@ -101,7 +101,7 @@ int furnaceDailyRunTime = 0;
 int furnaceTotalRunTime = 0;
 char inputChar;	//store the value input from the serial port or telnet client
 int i = 0; //for for loops
-Password password = Password(MichaelPassword); //The password is contained in a private header file
+//Password password = Password(MichaelPassword); //The password is contained in a private header file
 float tempSetPoint = 21.0; //The setPoint temperature
 //float tempHysterisis = 0.25; //The values applied as +/- to the set point to avoid chattering the furnace control
 bool maintainTemperature; //Furnace ON/Off commands are only sent if this is true
@@ -153,6 +153,7 @@ float garageFirmware = -1; // track the garage node firmware version
 float garageTempOutdoor = -127.0;  //value used to store outdoor temperature as received from the garage node
 float garageTempAmbient = -127.0; //value used to store garage temperature as measured from the garage node
 int garageDoorStatus = -1111; // 0 = open, 1 = closed, -1111 = timeout
+bool lastGarageDoorStatus = 1; // 0 = open, 1 = closed (don't keep track of time-out)
 bool garageDoorError = false; //track whether garage door error flag is set
 bool garageLastDoorActivation = false; //keep track of whether the last door activation was to open or close. 0 = open, 1 = close
 bool garageAutoCloseStatus = false; // track whether auto close is enabled or not
@@ -174,6 +175,7 @@ void setup()
 {
   //Initialize the IO on this node
   pinMode(garageDoorStatusPin, OUTPUT);
+  digitalWrite(garageDoorStatusPin, LOW);
   pinMode(13, OUTPUT);
   
   //Initialize the realtime clock
@@ -268,7 +270,7 @@ void loop()
    
    
    // server.print(F("Enter password: "));
-   validPassword = true;
+   validPassword = true; //THIS IS USED TO BYPASS THE PASSWORD REQUIREMENT - SINCE I'M NOW ACCESSING ONLY THROUGH SSH ON RASPBERRY PI
    
     while(!validPassword && client.connected())
     {
@@ -713,7 +715,8 @@ void loop()
               server.write(carriageReturn);
               server.write(newLine);
               garageDoorStatus = 0;
-              digitalWrite(garageDoorStatusPin, garageDoorStatus);
+              //digitalWrite(garageDoorStatusPin, garageDoorStatus);
+              garageChime(garageDoorStatus);
             }
           }
 
@@ -953,7 +956,7 @@ void loop()
         server.write(carriageReturn);
 
         client.stop();
-        password.reset();
+//        password.reset();
         timeOfLastInput = millis();
 
       }
@@ -1592,8 +1595,11 @@ void requestAndUpdateGarageDoorStatus()
 {
           Serial1.print(grge_requestDoorStatus);
           garageDoorStatus = boolIntFromSerial1();
-          digitalWrite(garageDoorStatusPin, garageDoorStatus);
-
+          if(garageDoorStatus != lastGarageDoorStatus && garageDoorStatus != -1111)//If garage status didn't time out and changed from last check
+          {
+              garageChime(garageDoorStatus);
+          }
+          
           server.print(F("Garage door is "));
           if(garageDoorStatus == 1)
             server.print(F("CLOSED"));
@@ -1642,7 +1648,13 @@ void getPeriodicUpdates()
        garageDoorStatus = boolIntFromSerial1();   
       }
     }
-    digitalWrite(garageDoorStatusPin, garageDoorStatus);
+
+    if(garageDoorStatus != -1111 && garageDoorStatus != lastGarageDoorStatus)
+    {
+        garageChime(garageDoorStatus);
+    }
+    //digitalWrite(garageDoorStatusPin, garageDoorStatus);
+    
 //    if(validPassword) //only output this if someone is logged in successfully
 //    server.print(garageDoorStatus);
 
@@ -1835,7 +1847,7 @@ void programThermostat()
         server.write(newLine);
         server.write(carriageReturn);
         client.stop();
-        password.reset();
+      //  password.reset();
         timeOfLastInput = millis();
         return;
       }
@@ -2501,7 +2513,7 @@ void telnetSerialRelay(int escapeChar)
         server.write(newLine);
         server.write(carriageReturn);
         client.stop();
-        password.reset();
+       // password.reset();
         timeOfLastInput = millis();
         return;
       }
@@ -2519,8 +2531,11 @@ void readSerial()
                 {
 		case garage_doorStatus:
 			garageDoorStatus = boolFromSerial1();
-                        //to-do: detect change in garage door status from last value, if it changed, log this immediately to the telnet client and the SD card
-		break;
+      if(garageDoorStatus != lastGarageDoorStatus && garageDoorStatus != -1111)//If garage status didn't time out and changed from last check
+      {
+          garageChime(garageDoorStatus);
+      }
+  		break;
 
 		case garage_tempZone1:
 			garageTempOutdoor = floatFromSerial1('!');
@@ -2656,4 +2671,37 @@ void makeDataString()
   dataString += ",";
   dataString += String(validPassword);
 }
+
+void garageChime(bool doorIsOpen)
+{
+  lastGarageDoorStatus = garageDoorStatus;//Update this so this function doesn't get called repeatedly for one event
+  
+  if(doorIsOpen)
+  {
+    digitalWrite(garageDoorStatusPin, HIGH);
+    delay(500);
+    digitalWrite(garageDoorStatusPin, LOW);
+    delay(250);
+    digitalWrite(garageDoorStatusPin, HIGH);
+    delay(500);
+    digitalWrite(garageDoorStatusPin, LOW);
+  }
+
+  if(!doorIsOpen)
+  {
+    int i;
+    for(i = 0; i < 6; i++)
+    {
+      digitalWrite(garageDoorStatusPin, HIGH);
+      delay(50);
+      digitalWrite(garageDoorStatusPin, LOW);
+      if(i = 6)
+        break;
+      delay(25);
+     }
+  return;
+  }
+}
+
+
 
