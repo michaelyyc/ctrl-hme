@@ -24,7 +24,6 @@ while 1:
         tn.write('n')
         response = tn.read_until("CONNECT", 10)
 
-
         if response == "CONNECT":
             print "Connected"
             #request all data
@@ -73,6 +72,12 @@ while 1:
             else:
                 text_file.write("ON" + '\n' + "<BR>")
                 text_file.write(furnaceRuntimeNow + " minutes Now ")
+
+#           Convert furnace minutes to hours
+# 	    furnaceRuntimeTodayHrs = float(furnaceRuntimeToday) / 60
+#	    furnaceRuntimeSinceRebootHrs = float(furnaceRuntimeSinceReboot) / 60
+#	    furnaceRuntimeSinceReboot = str(furnaceRuntimeSinceRebootHrs)
+#	    furnaceRuntimeToday = str(furnaceRuntimeTodayHrs)
 
             text_file.write(furnaceRuntimeToday + " minutes Today, " + furnaceRuntimeSinceReboot + " minutes since reboot" + '\n' + "<BR>")
 
@@ -157,11 +162,30 @@ while 1:
    		smtpObj = smtplib.SMTP('mail.shaw.ca')
    		smtpObj.sendmail(sender, receivers, message)         
    		print "Successfully sent email"
-	    except SMTPException:
+	    except:
    		print "Error: unable to send email"
 	
     	#else:
         	#print("No change in garage stauts")    	
+
+	if(garageDoorStatus == '1' and lastGarageDoorStatus == '0'):
+   		# Send alert email
+       	    print("Garage door Closed on this iteration")
+
+	    sender = 'ctrl@bladon.ca'
+	    receivers = ['4038130062@txt.bell.ca']
+   	    message = "Garage Door is Closed"
+
+	    try:
+   		smtpObj = smtplib.SMTP('mail.shaw.ca')
+   		smtpObj.sendmail(sender, receivers, message)         
+   		print "Successfully sent email"
+	    except:
+   		print "Error: unable to send email"
+	
+    	#else:
+        	#print("No change in garage stauts")    	
+
     
     	lastGarageDoorStatus = garageDoorStatus
 
