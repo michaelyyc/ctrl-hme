@@ -21,11 +21,12 @@ The temperature sensors are DS18B20
   #define oneWireBus1             3 //inside temperature sensor
   #define oneWireBus2             4 //outside temperature sensor
   #define relay120V1              5 //relay for 120V AC power (block heater)
-   
+  #define beeperPin              12 //used to alert when the door is about to auto-close
+  
   //Constants
   #define activationTime         15
   #define timeLimit             300
-  #define FWversion            0.76
+  #define FWversion            0.77
   #define baud                 9600
   #define loopsPerSecond      40000 //used in calculating loops for periodic updates
 
@@ -62,6 +63,12 @@ void setup() {
   pinMode(doorStatusPin, INPUT);//garage door sensor (1 = closed, 0 = open)
   pinMode(relay120V1, OUTPUT);//active high relay for 120V output
   digitalWrite(relay120V1, HIGH);//turn off the 120V output (active LOW)
+
+  //setup and test the beeper
+  pinMode(beeperPin, OUTPUT);
+  digitalWrite(beeperPin, LOW);
+  delay(500);
+  digitalWrite(beeperPin, HIGH);
 
   sensors1.begin(); // Start up the library for one-wire bus 1
   sensors2.begin(); // Start up the library for one-wire bus 2 
@@ -126,6 +133,19 @@ void loop() {
       digitalWrite(statusLight, LOW);
       break; //jump out of this loop
     }
+
+//beep every second for the last few before auto-closing the door.
+//even number of seconds left will beep, odd numbers will be silent
+    if(i <= 6)
+    {
+      digitalWrite(beeperPin, HIGH);
+    }
+    
+    if(i <= 6 && i % 2)
+    {
+      digitalWrite(beeperPin, LOW);
+    }
+    
     if(i == 0)
     {
      activateDoor();
@@ -402,13 +422,13 @@ void commandReply()
     Serial.print("!");
     return;
   }
-  
+/*  
   if (commandReq = broadcast_sendAll)
   {
  //   sendAllData();
     return;
   }
-    
+  */  
 //  Serial.print("!");//reply for unimplemented commands
     return;
   
@@ -419,6 +439,11 @@ void checkDoor()//This function checks the door status and sends a message on se
 {
    lastDoorStatus = doorStatus;
   doorStatus = !digitalRead(doorStatusPin);
+  if(doorStatus)//if door is closed
+  {
+   digitalWrite(beeperPin, HIGH); 
+  }
+  
   if(doorStatus != lastDoorStatus)//door status has changed, send an alert via serial port
   {
    Serial.print(garage_doorStatus);
