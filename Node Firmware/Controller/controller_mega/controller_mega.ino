@@ -45,16 +45,11 @@
 //Constants
 #define oneWireBus1                   7 // Main floor Temperature Sensor
 #define baud                       9600 // serial port baud rate
-#define FWversion                  0.87 // FW version
-// NOTE **** line 1060 has been commented out to preven thr furnace from ever turning on... this is in place
-// until a new main floor temperature sensor is installed, since the controller has now been moved into the basement ceiling
-
+#define FWversion                  0.88 // FW version
 #define tempMaximumAllowed         23.0// maximum temperature
 #define tempMinimumAllowed         15.0 //minimum temperature
-//#define blockHeaterOnHour           4 //hour in the morning to automatically turn on block heater
-//#define blockHeaterOffHour         20 //hour to turn the block heater off automatically
 #define blockHeaterMaxTemp           -1 //maximum temperature INSIDE garage for block heater use
-#define garageDoorStatusPin           9 //This pin is used to driver a beeper to indicate when the garage door opens/closes
+#define garageDoorStatusPin           6 //This pin is used to driver a beeper to indicate when the garage door opens/closes. The beeper control is active LOW.
 #define tempUpdateDelay              30 //number of seconds to wait before requesting another update from sensors when there is no telnet client connected
 #define tempUpdateDelayLong          50 //number of seconds to wait before requesting another update from sensors when there IS a telnet client connected
 #define clientTimeoutLimit        90000 //number of milliseconds before assuming the client has disconnected
@@ -175,7 +170,9 @@ void setup()
 {
   //Initialize the IO on this node
   pinMode(garageDoorStatusPin, OUTPUT);
-  digitalWrite(garageDoorStatusPin, LOW);
+  //Test the beeper
+  garageChime(true);
+  digitalWrite(garageDoorStatusPin, HIGH);
   pinMode(13, OUTPUT);
   
   //Initialize the realtime clock
@@ -2678,26 +2675,24 @@ void garageChime(bool doorIsOpen)
   
   if(doorIsOpen)
   {
-    digitalWrite(garageDoorStatusPin, HIGH);
-    delay(500);
     digitalWrite(garageDoorStatusPin, LOW);
+    delay(500);
+    digitalWrite(garageDoorStatusPin, HIGH);
     delay(250);
-    digitalWrite(garageDoorStatusPin, HIGH);
-    delay(500);
     digitalWrite(garageDoorStatusPin, LOW);
+    delay(500);
+    digitalWrite(garageDoorStatusPin, HIGH);
   }
 
   if(!doorIsOpen)
   {
     int i;
-    for(i = 0; i < 6; i++)
+    for(i = 0; i < 3; i++)
     {
-      digitalWrite(garageDoorStatusPin, HIGH);
-      delay(50);
       digitalWrite(garageDoorStatusPin, LOW);
-      if(i = 6)
-        break;
-      delay(25);
+      delay(150);
+      digitalWrite(garageDoorStatusPin, HIGH);
+      delay(100);
      }
   return;
   }
