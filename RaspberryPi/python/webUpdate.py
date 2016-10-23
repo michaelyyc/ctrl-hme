@@ -1,10 +1,14 @@
 import sys
 import telnetlib
+import smtplib
 from time import sleep
 
 HOST = "192.168.1.230"
 
 tn = telnetlib.Telnet()
+
+#Variable to track garage door status for changes between iterations
+lastGarageDoorStatus = '0'
 
 while 1:
     print("opening telnet connection to home controller... ")
@@ -19,7 +23,6 @@ while 1:
         sleep(0.1)
         tn.write('n')
         response = tn.read_until("CONNECT", 10)
-
 
         if response == "CONNECT":
             print "Connected"
@@ -36,7 +39,7 @@ while 1:
             tempSetPoint = tn.read_until(',',0.1)[:-1]
             maintainTemperature = tn.read_until(',',0.1)[:-1]
             programmableThermostatEnabled = tn.read_until(',',0.1)[:-1]
-	    furnaceStatus = tn.read_until(',',0.1)[:-1]
+            furnaceStatus = tn.read_until(',',0.1)[:-1]
             ventFanForceOn = tn.read_until(',',0.1)[:-1]
             ventFanAutoEnabled = tn.read_until(',',0.1)[:-1]
             ventFanStatus = tn.read_until(',',0.1)[:-1]
@@ -47,6 +50,7 @@ while 1:
             bedroomHeaterStatus = tn.read_until(',',0.1)[:-1]
             bedroomHeaterAutoOffHour = tn.read_until(',',0.1)[:-1]
             basementTempAmbient = tn.read_until(',',0.1)[:-1]
+            controllerTemperature = tn.read_until(',',0.1)[:-1]
             garageTempAmbient = tn.read_until(',',0.1)[:-1]
             garageTempOutdoor = tn.read_until(',',0.1)[:-1]
             blockHeaterEnabled = tn.read_until(',',0.1)[:-1]
@@ -69,6 +73,12 @@ while 1:
             else:
                 text_file.write("ON" + '\n' + "<BR>")
                 text_file.write(furnaceRuntimeNow + " minutes Now ")
+
+#           Convert furnace minutes to hours
+# 	    furnaceRuntimeTodayHrs = float(furnaceRuntimeToday) / 60
+#	    furnaceRuntimeSinceRebootHrs = float(furnaceRuntimeSinceReboot) / 60
+#	    furnaceRuntimeSinceReboot = str(furnaceRuntimeSinceRebootHrs)
+#	    furnaceRuntimeToday = str(furnaceRuntimeTodayHrs)
 
             text_file.write(furnaceRuntimeToday + " minutes Today, " + furnaceRuntimeSinceReboot + " minutes since reboot" + '\n' + "<BR>")
 
@@ -96,8 +106,8 @@ while 1:
             text_file.write("Back Bedroom Temperature: " + backBedroomTemperature + '\n' + "<BR><BR>")
 
             text_file.write("<strong>Basement</strong><BR>")		 
-            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR><BR>")
-
+            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR>")
+            text_file.write("Controller Temperature: " + controllerTemperature + '\n' + "<BR><BR>")
 
             text_file.write("<strong>Garage and Outdoor</strong><BR>")		 
             text_file.write("Garage Temperature: " + garageTempAmbient + '\n' + "<BR>")
@@ -139,6 +149,48 @@ while 1:
             text_file.close()
             print("Web Page Updated at " + dateTime),
 
+	    #check if the garage status changed from closed to open on this iteration
+  	
+	if(garageDoorStatus == '0' and lastGarageDoorStatus == '1'):
+   		# Send alert email
+       	    print("Garage door opened on this iteration")
+
+	    sender = 'ctrl@bladon.ca'
+	    receivers = ['4038130062@txt.bell.ca']
+   	    message = "Garage Door is Open!"
+
+	    try:
+   		smtpObj = smtplib.SMTP('mail.shaw.ca')
+   		smtpObj.sendmail(sender, receivers, message)         
+   		print "Successfully sent email"
+	    except:
+   		print "Error: unable to send email"
+	
+    	#else:
+        	#print("No change in garage stauts")    	
+
+	if(garageDoorStatus == '1' and lastGarageDoorStatus == '0'):
+   		# Send alert email
+       	    print("Garage door Closed on this iteration")
+
+	    sender = 'ctrl@bladon.ca'
+	    receivers = ['4038130062@txt.bell.ca']
+   	    message = "Garage Door is Closed"
+
+	    try:
+   		smtpObj = smtplib.SMTP('mail.shaw.ca')
+   		smtpObj.sendmail(sender, receivers, message)         
+   		print "Successfully sent email"
+	    except:
+   		print "Error: unable to send email"
+	
+    	#else:
+        	#print("No change in garage stauts")    	
+
+    
+    	lastGarageDoorStatus = garageDoorStatus
+
+
 #        else:
 #            print("Telnet Server Timeout")
 
@@ -148,7 +200,11 @@ while 1:
     tn.close()
 
     print("Disconnected")
-    if response =="CONNECT":
+    
+
+    
+
+    if response =="CONNECT": #if the last attempt was successful, wait 10 seconds to do it again
             delay = 10
     else: #only wait 2 seconds for re-try if previous attempt failed
             delay = 2

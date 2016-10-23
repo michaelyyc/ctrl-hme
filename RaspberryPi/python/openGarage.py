@@ -46,6 +46,7 @@ if response == "CONNECT":
     bedroomHeaterStatus = tn.read_until(',',0.1)[:-1]
     bedroomHeaterAutoOffHour = tn.read_until(',',0.1)[:-1]
     basementTempAmbient = tn.read_until(',',0.1)[:-1]
+    controllerTemperature = tn.read_until(',',0.1)[:-1]
     garageTempAmbient = tn.read_until(',',0.1)[:-1]
     garageTempOutdoor = tn.read_until(',',0.1)[:-1]
     blockHeaterEnabled = tn.read_until(',',0.1)[:-1]

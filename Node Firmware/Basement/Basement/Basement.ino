@@ -18,7 +18,7 @@ Furnace and fan can both be controlled by remote command
 
 
   //I/O pin definitions
-  #define furnaceControlRelay         7 // controls heat on furnace
+  #define furnaceControlRelay         3 // controls heat on furnace
   #define fanControlRelay             4 // controls ventillation fan on furnace
   #define oneWireBus1                 2 // temperature sensor for zone 1 (basement)
   #define oneWireBus2                 5 // temperature sensor for zone 2 (back bedroom)
@@ -93,7 +93,7 @@ void loop() {
 
     sensors1.requestTemperatures();
     tempAmbient = sensors1.getTempCByIndex(0);
-    if(tempAmbient == 85.0 || tempAmbient == -127.0)
+    if(tempAmbient == 85.0 || tempAmbient == -127.0) //retry one time if bad value is read
     {
     delay(75);
     sensors1.requestTemperatures();
