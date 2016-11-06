@@ -11,6 +11,14 @@ tn = telnetlib.Telnet()
 lastGarageDoorStatus = '0'
 
 while 1:
+#get current electricity use by reading it from the log file
+    with open('../efergy/energy_log.csv') as file:
+    	watts = file.readlines()[-1]
+
+	watts = watts.split(',', 2)[-1] #strip the date and time
+ 	watts = watts[:-5] #strip the trailing decimals in the energy use
+
+
     print("opening telnet connection to home controller... ")
     failedAttempt = False
     
@@ -50,7 +58,7 @@ while 1:
             bedroomHeaterStatus = tn.read_until(',',0.1)[:-1]
             bedroomHeaterAutoOffHour = tn.read_until(',',0.1)[:-1]
             basementTempAmbient = tn.read_until(',',0.1)[:-1]
-            controllerTemperature = tn.read_until(',',0.1)[:-1]
+            #controllerTemperature = tn.read_until(',',0.1)[:-1]
             garageTempAmbient = tn.read_until(',',0.1)[:-1]
             garageTempOutdoor = tn.read_until(',',0.1)[:-1]
             blockHeaterEnabled = tn.read_until(',',0.1)[:-1]
@@ -66,6 +74,11 @@ while 1:
 
             text_file = open(myfile, "w")
             text_file.write("<HTML>" + '\n' + "<HEAD>" + '\n' + "<TITLE>Home Controller</TITLE>" + '\n' + "<meta http-equiv=\"refresh\" content=\"10\">" + '\n' + "</HEAD>" + '\n' + "<BODY bgcolor=\"#ACDBDA\">")
+            text_file.write("<strong>Electrical</strong><BR>")
+            text_file.write("Current power: ")
+            text_file.write(watts)
+	    text_file.write(" W<BR><BR>")
+            
             text_file.write("<strong>Furnace</strong><BR>")
             text_file.write("Furnace is: ")
             if(furnaceStatus == '0'):
@@ -106,8 +119,8 @@ while 1:
             text_file.write("Back Bedroom Temperature: " + backBedroomTemperature + '\n' + "<BR><BR>")
 
             text_file.write("<strong>Basement</strong><BR>")		 
-            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR>")
-            text_file.write("Controller Temperature: " + controllerTemperature + '\n' + "<BR><BR>")
+            text_file.write("Basement Temperature: " + basementTempAmbient + '\n' + "<BR><BR>")
+#            text_file.write("Controller Temperature: " + controllerTemperature + '\n' + "<BR><BR>")
 
             text_file.write("<strong>Garage and Outdoor</strong><BR>")		 
             text_file.write("Garage Temperature: " + garageTempAmbient + '\n' + "<BR>")
@@ -135,6 +148,7 @@ while 1:
             text_file.write("<a href=\"protected/awayMode.php\">Away Mode</a>" + '\n' + "<BR>")
             text_file.write("<a href=\"protected/setTempAuto.php\">Run Schedule</a>" + '\n' + "<BR>")
 	    text_file.write("<a href=\"protected/wakeUpServer.php\">Wake Up Server</a>" + '\n' + "<BR>")
+            text_file.write("<a href=\"protected/datalog.csv\">Download Log (.csv)</a>" + '\n' + "<BR>")
 #           text_file.write("Maintain Bedroom Temp at 19'C" + '\n' + "<BR>")
 #           text_file.write("Bedroom heater off" + '\n' + "<BR>")
 #           text_file.write("Block Heater On" + '\n' + "<BR>")
@@ -149,6 +163,13 @@ while 1:
             text_file.close()
             print("Web Page Updated at " + dateTime),
 
+#Append to CSV Log file
+#Date Time	uptimeSeconds	furnaceRuntimeNow	furnaceRuntimeToday	furnaceRuntimeSinceReboot	garageDoorStatus	mainFloorAvgTemp	livingRoomTemperature	tempSetPoint	maintainTemperature	programmableThermostatEnabled	furnaceStatus	ventFanForceOn	ventFanAutoEnabled	ventFanStatus	backBedroomTemperature	masterBedroomTemperature	masterBedroomTemperatureSetPoint	bedroomMaintainTemp	bedroomHeaterStatus	bedroomHeaterAutoOffHour	basementTempAmbient	garageTempAmbient	garageTempOutdoor	blockHeaterEnabled	blockHeaterStatus	blockHeaterOffHour	blockHeaterOnHour	blockHeaterMaxTemp	validPassword	FWversion:0.86
+            csvfile = "/var/www/html/protected/datalog.csv"
+            csv_file = open(csvfile, "a")
+            csv_file.write(dateTime + "," + uptimeSeconds + "," + watts + "," + furnaceRuntimeNow + "," + furnaceRuntimeToday + "," + furnaceRuntimeSinceReboot + "," + garageDoorStatus + "," + mainFloorAvgTemp + "," + livingRoomTemperature + "," + tempSetPoint + "," + maintainTemperature + "," + programmableThermostatEnabled + "," + furnaceStatus + "," + ventFanForceOn + "," + ventFanAutoEnabled + "," + ventFanStatus + "," + backBedroomTemperature + "," + masterBedroomTemperature + "," + masterBedroomTemperatureSetPoint + "," + bedroomMaintainTemp + "," + bedroomHeaterStatus + "," + bedroomHeaterAutoOffHour + "," + garageTempAmbient + "," + garageTempOutdoor + "," + blockHeaterEnabled + "," + blockHeaterStatus + "," + blockHeaterOffHour + "," + blockHeaterOnHour + "," + blockHeaterMaxTemp + "," + validPassword + "\n")
+	    csv_file.close()
+
 	    #check if the garage status changed from closed to open on this iteration
   	
 	if(garageDoorStatus == '0' and lastGarageDoorStatus == '1'):
@@ -159,12 +180,12 @@ while 1:
 	    receivers = ['4038130062@txt.bell.ca']
    	    message = "Garage Door is Open!"
 
-	    try:
-   		smtpObj = smtplib.SMTP('mail.shaw.ca')
-   		smtpObj.sendmail(sender, receivers, message)         
-   		print "Successfully sent email"
-	    except:
-   		print "Error: unable to send email"
+#	    try:
+#   		smtpObj = smtplib.SMTP('mail.shaw.ca')
+#   		smtpObj.sendmail(sender, receivers, message)         
+#   		print "Successfully sent email"
+#	    except:
+#   		print "Error: unable to send email"
 	
     	#else:
         	#print("No change in garage stauts")    	
@@ -177,12 +198,12 @@ while 1:
 	    receivers = ['4038130062@txt.bell.ca']
    	    message = "Garage Door is Closed"
 
-	    try:
-   		smtpObj = smtplib.SMTP('mail.shaw.ca')
-   		smtpObj.sendmail(sender, receivers, message)         
-   		print "Successfully sent email"
-	    except:
-   		print "Error: unable to send email"
+#	    try:
+#   		smtpObj = smtplib.SMTP('mail.shaw.ca')
+#   		smtpObj.sendmail(sender, receivers, message)         
+#   		print "Successfully sent email"
+#	    except:
+#   		print "Error: unable to send email"
 	
     	#else:
         	#print("No change in garage stauts")    	
